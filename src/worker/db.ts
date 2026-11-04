@@ -44,6 +44,8 @@ export interface ReportRow {
   total: number
   content: GroupReport | null
   error: string | null
+  /** consecutive failed LLM steps; reset on success (migration 0002) */
+  failures: number
   shareId: string | null
   createdAt: number
 }
@@ -85,6 +87,7 @@ interface ReportDbRow {
   total: number
   content_json: string | null
   error: string | null
+  failures: number
   share_id: string | null
   created_at: number
 }
@@ -132,6 +135,7 @@ const toReport = (r: ReportDbRow): ReportRow => ({
   total: r.total,
   content: parse<GroupReport>(r.content_json),
   error: r.error,
+  failures: r.failures,
   shareId: r.share_id,
   createdAt: r.created_at,
 })
@@ -143,6 +147,7 @@ const REPORT_COLUMNS = new Map<string, string>([
   ['total', 'total'],
   ['content', 'content_json'],
   ['error', 'error'],
+  ['failures', 'failures'],
   ['shareId', 'share_id'],
   ['subject', 'subject'],
   ['question', 'question'],
