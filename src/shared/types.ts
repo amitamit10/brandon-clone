@@ -22,3 +22,28 @@ export interface ParsedChat {
   format: 'android' | 'ios'
   dateOrder: 'mdy' | 'dmy'
 }
+
+export interface MemberStats {
+  messages: number
+  words: number
+  media: number
+  deleted: number
+  edited: number
+  starters: number
+  topEmojis: [string, number][]
+  avgReplyMs: number | null
+  busiestHour: number
+}
+
+export interface ChatStats {
+  firstTs: number
+  lastTs: number
+  days: number
+  total: number
+  perMember: Record<string, MemberStats>
+  hourHistogram: number[]
+  weekdayHistogram: number[]
+  busiestDay: { date: string; count: number }
+  longestSilence: { fromTs: number; toTs: number }
+  shiftWeek: { weekStart: string; ratio: number } | null
+}
