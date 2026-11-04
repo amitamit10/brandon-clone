@@ -1,0 +1,15 @@
+{
+  "name": "brandon-clone",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "brandon", "database_id": "local-placeholder", "migrations_dir": "migrations" }
+  ],
+  "triggers": { "crons": ["0 3 * * *"] }
+}
