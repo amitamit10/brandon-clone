@@ -34,18 +34,26 @@ function sanitizePass(s: string): string {
   return s
     .replace(/!\[[^\]\n]{0,200}\]\([^)\n]{0,500}\)/g, '') // inline images
     .replace(/!\[[^\]\n]{0,200}\]\[[^\]\n]{0,200}\]/g, '') // reference-style images
-    .replace(/^ {0,3}\[[^\]\n]{1,200}\]:[^\n]{0,600}$/gm, '') // reference definitions
+    .replace(/^[ \t>*+-]{0,12}\[[^\]\n]{1,200}\]:[^\n]{0,600}$/gm, '') // reference definitions, also inside list/quote prefixes
     .replace(/\[([^\]\n]{0,200})\]\([^)\n]{0,500}\)/g, '$1') // inline links keep their text
     .replace(/<\/?[a-zA-Z][^>\n]{0,200}>/g, '') // HTML tags
     .replace(/\b(?:https?|ftp):\/\/\S+/gi, '[link removed]')
-    .replace(/(^|[\s(])(?:www\.|\/\/)[^\s)]{1,300}/gi, '$1[link removed]')
+    .replace(/(?<![\p{L}\p{N}])www\.[^\s)]{1,300}/giu, '[link removed]')
+    .replace(/\/\/[^\s)]{1,300}/g, '[link removed]')
     .replace(/\b(?:javascript|data|vbscript):\S*/gi, '')
+    .replace(/!\[/g, '') // any remaining image opener (shortcut / collapsed forms)
+}
+
+/** Last resort when the text keeps changing: drop the characters that can open tags or images. */
+function failClosed(s: string): string {
+  return s.replace(/</g, '').replace(/!\[/g, '').replace(/\]\(/g, '] (')
 }
 
 /**
  * Removes things that must never come out of the model: images, links, URLs, raw HTML.
- * Repeats until the text stops changing (so nested fragments cannot rebuild a tag). This is defence
- * in depth only: the UI must still render model text as plain text with no raw HTML and no remote images.
+ * Repeats until the text stops changing (so nested fragments cannot rebuild a tag) and fails closed
+ * if it never does. This is defence in depth only: the UI must still render model text as plain text
+ * with no raw HTML and no remote images.
  */
 export function sanitizeModelText(s: string): string {
   let cur = s
@@ -54,5 +62,5 @@ export function sanitizeModelText(s: string): string {
     if (next === cur) return next
     cur = next
   }
-  return cur
+  return failClosed(cur)
 }

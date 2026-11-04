@@ -251,7 +251,8 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
   const cleanBody = (body: string): string => {
     const out: string[] = []
     let needBlank = false
-    for (const line of body.split('\n')) {
+    // Markdown treats \r\n and a lone \r as line breaks, so normalise before splitting.
+    for (const line of body.replace(/\r\n?/g, '\n').split('\n')) {
       const qEnd = quotePrefixEnd(line)
       if (qEnd >= 0) {
         const q = verified(line.slice(qEnd))
@@ -294,12 +295,12 @@ function quotePrefixEnd(line: string): number {
     } else if (c === '>') {
       sawGt = true
       i++
-    } else if (!sawGt && (c === '-' || c === '*' || c === '+') && line[i + 1] === ' ') {
+    } else if (!sawGt && (c === '-' || c === '*' || c === '+') && (line[i + 1] === ' ' || line[i + 1] === '\t')) {
       i++
     } else if (!sawGt && c >= '0' && c <= '9') {
       let j = i
       while (j < n && j - i < 9 && line[j] >= '0' && line[j] <= '9') j++
-      if ((line[j] === '.' || line[j] === ')') && line[j + 1] === ' ') i = j + 1
+      if ((line[j] === '.' || line[j] === ')') && (line[j + 1] === ' ' || line[j + 1] === '\t')) i = j + 1
       else break
     } else {
       break

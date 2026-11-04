@@ -275,4 +275,14 @@ describe('review round 3: member allowlist, list-nested quotes, names inside the
       expect(prompt).toContain(needle)
     }
   })
+
+  it('detects quotes after a tab following a list marker and across lone CR line breaks', () => {
+    const chat = mini([{ sender: 'Ana', text: 'good morning all everyone' }])
+    const body = ['-\t> fake tab one', '1.\t> fake tab two', 'intro\r> fake after lone cr', 'crlf line\r\n> good morning all everyone\r'].join('\n')
+    const out = verifyQuotes(withBody(body), chat).sections[0].body
+    expect(out).not.toMatch(/fake/)
+    expect(out).toContain('> good morning all everyone')
+    expect(out).not.toContain('\r')
+  })
 })
+
