@@ -61,4 +61,35 @@ describe('extractChatText', () => {
     expect(caught).toBeInstanceOf(ParseError)
     expect((caught as ParseError).code).toBe('no_chat_file')
   })
+
+  const codeOf = (fn: () => unknown): string | undefined => {
+    try {
+      fn()
+    } catch (e) {
+      return e instanceof ParseError ? e.code : `other:${(e as Error).message}`
+    }
+    return undefined
+  }
+
+  it('rejects an entry whose declared size exceeds the cap, before inflating it', () => {
+    const bomb = zipOf({ '_chat.txt': new Uint8Array(11 * 1024 * 1024) }) // compresses to a few KB
+    expect(bomb.length).toBeLessThan(100 * 1024)
+    expect(codeOf(() => extractChatText(bomb, 'export.zip'))).toBe('file_too_large')
+  })
+
+  it('rejects a zip with too many .txt entries', () => {
+    const files: Record<string, string> = {}
+    for (let i = 0; i < 17; i++) files[`f${i}.txt`] = 'x\n'
+    expect(codeOf(() => extractChatText(zipOf(files), 'export.zip'))).toBe('file_too_large')
+  })
+
+  it('rejects a bare .txt over the cap', () => {
+    expect(codeOf(() => extractChatText(new Uint8Array(11 * 1024 * 1024).fill(65), 'chat.txt'))).toBe('file_too_large')
+  })
+
+  it('wraps malformed archives in ParseError bad_zip', () => {
+    const zip = zipOf({ '_chat.txt': chatTxt })
+    const broken = zip.slice(0, Math.floor(zip.length / 2)) // truncated: starts with PK header, ends mid-archive
+    expect(codeOf(() => extractChatText(broken, 'export.zip'))).toBe('bad_zip')
+  })
 })

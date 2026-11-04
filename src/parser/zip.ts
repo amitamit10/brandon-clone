@@ -3,6 +3,11 @@ import { ParseError } from '../shared/types'
 
 const decoder = new TextDecoder('utf-8')
 
+/** Hard caps on untrusted input, enforced on declared sizes before anything is inflated. */
+export const MAX_TEXT_BYTES = 10 * 1024 * 1024
+export const MAX_TOTAL_BYTES = 20 * 1024 * 1024
+export const MAX_ENTRIES = 16
+
 function decodeText(bytes: Uint8Array): string {
   return decoder.decode(bytes).replace(/^﻿/, '')
 }
@@ -19,12 +24,28 @@ function isZip(bytes: Uint8Array): boolean {
  */
 export function extractChatText(bytes: Uint8Array, filename: string): string {
   if (!isZip(bytes)) {
-    if (filename.toLowerCase().endsWith('.txt')) return decodeText(bytes)
-    throw new ParseError('no_chat_file')
+    if (!filename.toLowerCase().endsWith('.txt')) throw new ParseError('no_chat_file')
+    if (bytes.length > MAX_TEXT_BYTES) throw new ParseError('file_too_large')
+    return decodeText(bytes)
   }
-  const entries = unzipSync(bytes, {
-    filter: (file) => file.name.toLowerCase().endsWith('.txt'),
-  })
+  let total = 0
+  let count = 0
+  let entries: Record<string, Uint8Array>
+  try {
+    entries = unzipSync(bytes, {
+      filter: (file) => {
+        if (!file.name.toLowerCase().endsWith('.txt')) return false
+        total += file.originalSize
+        if (++count > MAX_ENTRIES || file.originalSize > MAX_TEXT_BYTES || total > MAX_TOTAL_BYTES) {
+          throw new ParseError('file_too_large')
+        }
+        return true
+      },
+    })
+  } catch (e) {
+    if (e instanceof ParseError) throw e
+    throw new ParseError('bad_zip')
+  }
   let best: Uint8Array | undefined
   for (const data of Object.values(entries)) {
     if (!best || data.length > best.length) best = data
