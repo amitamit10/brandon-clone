@@ -47,3 +47,35 @@ export interface ChatStats {
   longestSilence: { fromTs: number; toTs: number }
   shiftWeek: { weekStart: string; ratio: number } | null
 }
+
+export type PersonaId = 'brandon' | 'clara' | 'diego'
+
+/** A slice of the chat sent to the model in one call. fromId/toId are message ids (inclusive). */
+export interface Chunk {
+  index: number
+  fromId: number
+  toId: number
+  text: string
+}
+
+export interface ChunkSummary {
+  index: number
+  events: string[]
+  jokes: string[]
+  /** keyed by sender name: a prototype-free record (sender names are untrusted) */
+  memberNotes: Record<string, string>
+  quotes: string[]
+}
+
+export interface GroupReport {
+  title: string
+  intro: string
+  verdict: string
+  dynamic: string
+  shiftWeekNote: string
+  runningJokes: string[]
+  /** body is markdown; real quotes appear as lines starting with '> ' */
+  sections: { emoji: string; heading: string; body: string }[]
+  members: { name: string; nickname: string; opinion: string; quote?: string }[]
+  advice: string
+}

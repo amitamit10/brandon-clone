@@ -1,0 +1,214 @@
+import { generateJson, type LlmProvider, type LlmRequest } from '../llm/provider'
+import { PERSONAS } from './personas'
+import { computeStats } from '../stats/compute'
+import type { ChatStats, ChunkSummary, GroupReport, ParsedChat, PersonaId } from '../shared/types'
+
+export type ReportKind = 'group' | 'member' | 'followup'
+
+export interface ReportInput {
+  persona: PersonaId
+  language: string
+  /** the person who uploaded the chat (their own export name) */
+  me: string
+  stats: ChatStats
+  summaries: ChunkSummary[]
+  kind: ReportKind
+  /** member name, for kind 'member' */
+  subject?: string
+  /** the follow-up question, for kind 'followup' */
+  question?: string
+  /** raw message lines retrieved for a follow-up */
+  retrieved?: string[]
+}
+
+const MAX_SUMMARY_CHARS = 40_000
+const MAX_RETRIEVED_CHARS = 8_000
+const MAX_SECTIONS = 20
+const MAX_MEMBERS = 60
+const MAX_JOKES = 20
+const MAX_BODY_CHARS = 8_000
+const MAX_SHORT_CHARS = 2_000
+
+const REPORT_SCHEMA = `{
+  "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
+  "runningJokes": string[],
+  "sections": [{"emoji": string, "heading": string, "body": string}],
+  "members": [{"name": string, "nickname": string, "opinion": string, "quote": string}],
+  "advice": string
+}`
+
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
+const str = (x: unknown, max = MAX_SHORT_CHARS): string => {
+  if (typeof x !== 'string') throw new Error('expected a string')
+  return x.slice(0, max)
+}
+const optStr = (x: unknown, max = MAX_SHORT_CHARS): string => (typeof x === 'string' ? x.slice(0, max) : '')
+const list = (x: unknown, max: number): unknown[] => {
+  if (!Array.isArray(x)) throw new Error('expected an array')
+  return x.slice(0, max)
+}
+
+const pct = (n: number, total: number) => (total > 0 ? ((n / total) * 100).toFixed(1) : '0.0')
+const isoDay = (ts: number) => new Date(ts).toISOString().slice(0, 10)
+const hhmm = (ts: number) => new Date(ts).toISOString().slice(11, 16)
+
+/** The stats block, formatted from the exact numbers computed by code. */
+function statsBlock(stats: ChatStats): string {
+  const lines = [
+    `Chat: ${stats.total} messages from ${isoDay(stats.firstTs)} to ${isoDay(stats.lastTs)} (${stats.days} days).`,
+    'Per member:',
+    ...Object.entries(stats.perMember).map(
+      ([name, m]) =>
+        `- ${name}: ${m.messages} messages (${pct(m.messages, stats.total)}%), ${m.starters} conversation starters, ` +
+        `${m.words} words, ${m.media} media, busiest hour ${String(m.busiestHour).padStart(2, '0')}:00 UTC`,
+    ),
+    `busiest day: ${stats.busiestDay.date} (${stats.busiestDay.count} messages)`,
+    `longest silence: ${isoDay(stats.longestSilence.fromTs)} ${hhmm(stats.longestSilence.fromTs)} to ${isoDay(stats.longestSilence.toTs)} ${hhmm(stats.longestSilence.toTs)}`,
+  ]
+  if (stats.shiftWeek) {
+    lines.push(`shift week: week of ${stats.shiftWeek.weekStart} (volume ${stats.shiftWeek.ratio.toFixed(2)}x the previous four weeks)`)
+  } else {
+    lines.push('shift week: not enough weeks of data')
+  }
+  return lines.join('\n')
+}
+
+function summariesBlock(summaries: ChunkSummary[]): string {
+  const out: string[] = []
+  let size = 0
+  for (const s of summaries) {
+    const part = [
+      `[slice ${s.index}]`,
+      ...s.events.map((e) => `event: ${e}`),
+      ...s.jokes.map((j) => `joke: ${j}`),
+      ...Object.entries(s.memberNotes).map(([n, note]) => `note on ${n}: ${note}`),
+      ...s.quotes.map((q) => `quote: ${q}`),
+    ].join('\n')
+    if (size + part.length > MAX_SUMMARY_CHARS) break
+    out.push(part)
+    size += part.length
+  }
+  return out.join('\n\n')
+}
+
+function requestBlock(a: ReportInput): string {
+  if (a.kind === 'member') return `Write the deep profile of ${a.subject ?? ''} in members (and sections). Other members may be left out.`
+  if (a.kind === 'followup') {
+    return [
+      `Answer this follow-up question about the chat: ${a.question ?? ''}`,
+      'Put the answer in sections, and a direct one-line answer in verdict. Other fields may be empty.',
+      'Retrieved lines from the chat:',
+      (a.retrieved ?? []).join('\n').slice(0, MAX_RETRIEVED_CHARS),
+    ].join('\n')
+  }
+  return 'Write the full group report with a profile for every member.'
+}
+
+function buildPrompt(a: ReportInput): string {
+  return [
+    `Language: write everything in ${a.language}.`,
+    `The person who asked for this report is ${a.me}.`,
+    'Exact stats (computed by code, use these numbers):',
+    statsBlock(a.stats),
+    'Summaries of the chat, in order:',
+    summariesBlock(a.summaries) || '(no summaries)',
+    requestBlock(a),
+    `Reply with ONLY JSON matching this shape:\n${REPORT_SCHEMA}`,
+  ].join('\n\n')
+}
+
+function toReport(x: unknown, a: ReportInput): GroupReport {
+  if (!isObject(x)) throw new Error('report is not an object')
+  const followup = a.kind === 'followup'
+  const full = !followup
+  const sectionsRaw = list(x.sections, MAX_SECTIONS)
+  const sections = sectionsRaw.map((s) => {
+    if (!isObject(s)) throw new Error('section is not an object')
+    return { emoji: str(s.emoji, 16), heading: str(s.heading), body: str(s.body, MAX_BODY_CHARS) }
+  })
+  if (sections.length === 0) throw new Error('no sections')
+
+  // members and runningJokes may be absent (followups); absent means empty.
+  const membersRaw = x.members === undefined ? [] : list(x.members, MAX_MEMBERS)
+  const members = membersRaw.map((m) => {
+    if (!isObject(m)) throw new Error('member is not an object')
+    const quote = typeof m.quote === 'string' && m.quote.length > 0 ? m.quote.slice(0, MAX_SHORT_CHARS) : undefined
+    return {
+      name: str(m.name),
+      nickname: optStr(m.nickname),
+      opinion: optStr(m.opinion, MAX_BODY_CHARS),
+      ...(quote !== undefined ? { quote } : {}),
+    }
+  })
+  if (a.kind === 'member' && !members.some((m) => m.name === a.subject)) {
+    throw new Error('member report has no profile for the subject')
+  }
+  if (a.kind === 'group' && members.length === 0) throw new Error('group report has no member profiles')
+
+  const verdict = followup ? str(x.verdict) : optStr(x.verdict)
+  if (followup && verdict.length === 0) throw new Error('followup has no direct answer')
+
+  const jokesRaw = x.runningJokes === undefined ? [] : list(x.runningJokes, MAX_JOKES)
+  if (!jokesRaw.every((j) => typeof j === 'string')) throw new Error('runningJokes must be strings')
+
+  return {
+    title: full ? str(x.title) : optStr(x.title),
+    intro: full ? str(x.intro, MAX_BODY_CHARS) : optStr(x.intro, MAX_BODY_CHARS),
+    verdict,
+    dynamic: optStr(x.dynamic, MAX_BODY_CHARS),
+    shiftWeekNote: full ? str(x.shiftWeekNote, MAX_BODY_CHARS) : optStr(x.shiftWeekNote, MAX_BODY_CHARS),
+    runningJokes: (jokesRaw as string[]).map((j) => j.slice(0, MAX_SHORT_CHARS)),
+    sections,
+    members,
+    advice: full ? str(x.advice, MAX_BODY_CHARS) : optStr(x.advice, MAX_BODY_CHARS),
+  }
+}
+
+/** One model call (plus at most one repair) that writes a report in the chosen persona. */
+export async function generateReport(p: LlmProvider, a: ReportInput): Promise<GroupReport> {
+  const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a) }
+  return generateJson(p, req, (x) => toReport(x, a))
+}
+
+/** Matching is case-, whitespace- and bidi-insensitive. */
+const BIDI = /[‎‏‪-‮]/g
+const normalise = (s: string) => s.replace(BIDI, '').toLowerCase().replace(/\s+/g, ' ').trim()
+const WRAP = new Set(['"', '“', '”', '«', '»'])
+
+/** Removes wrapping quote marks, one character at a time (no regex backtracking). */
+function unwrap(s: string): string {
+  let start = 0
+  let end = s.length
+  while (start < end && WRAP.has(s[start])) start++
+  while (end > start && WRAP.has(s[end - 1])) end--
+  return s.slice(start, end)
+}
+
+/**
+ * Drops every quote that is not a substring of one message. Checks member quotes and
+ * '> ' lines in section bodies. Returns a new report; the input is not changed.
+ */
+export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport {
+  // \u0001 separates messages, so a quote cannot match across two messages.
+  const haystack = chat.messages.map((m) => normalise(m.text)).join('\u0001')
+  const isQuote = (raw: string): boolean => {
+    const n = normalise(unwrap(raw.trim()))
+    return n.length > 0 && !n.includes('\u0001') && haystack.includes(n)
+  }
+
+  return {
+    ...report,
+    sections: report.sections.map((s) => ({
+      emoji: s.emoji,
+      heading: s.heading,
+      body: s.body
+        .split('\n')
+        .filter((line) => !line.startsWith('> ') || isQuote(line.slice(2)))
+        .join('\n'),
+    })),
+    members: report.members.map((m) => {
+      const keep = m.quote !== undefined && isQuote(m.quote)
+      return { name: m.name, nickname: m.nickname, opinion: m.opinion, ...(keep ? { quote: m.quote } : {}) }
+    }),
+  }
+}
