@@ -15,7 +15,7 @@ import { generateReport, verifyQuotes } from '../pipeline/report'
 import { reconstructMessages } from '../pipeline/reconstruct'
 import { summarizeChunk } from '../pipeline/summarize'
 import type { ChunkSummary, GroupReport, ParsedChat } from '../shared/types'
-import { createDb, type ReportRow, type ReportStatus } from './db'
+import { createDb, type ReportStatus } from './db'
 import type { Env } from './index'
 
 /** Consecutive failed LLM steps before a report is marked failed. */
@@ -42,15 +42,22 @@ const phaseOf = (status: ReportStatus, pendingSummaries: boolean): JobPhase => {
   return pendingSummaries ? 'summarizing' : 'reporting'
 }
 
+/** How long one advance may hold a report. A crashed holder is retried after this. */
+export const LEASE_MS = 120_000
+
 /**
  * Advances a report by at most ONE LLM call. If some chunk has no stored summary, that chunk is
  * summarised. Otherwise the report is written from all summaries, checked with verifyQuotes, and
  * saved as done. Summaries belong to the chat, so later reports on it reuse them.
  *
- * LLM errors do not fail the job at once: the code (rate_limited or llm_error) goes into `error`,
- * `failures` goes up, and status stays running. After MAX_FAILURES in a row the status is failed.
- * Done and failed reports return at once with no LLM call. Returns null when the report or its chat
- * is missing or expired. Throws no_llm_key_configured when no provider can be built.
+ * Before the model is called the attempt is CLAIMED atomically (failures + 1 and a lease), so a crash
+ * or CPU kill still counts, and two overlapping calls cannot both run: the second one gets the
+ * current state back with no LLM call. LLM errors do not fail the job at once: the code
+ * (rate_limited or llm_error) goes into `error` and the report stays running; after MAX_FAILURES
+ * attempts in a row without a success it is failed. All writes after the call are conditional on the
+ * report still being open, so a late call can never revive or overwrite a failed or done report.
+ * Returns null when the report or its chat is missing or expired. Throws no_llm_key_configured when
+ * no provider can be built.
  */
 export async function advanceReport(env: Env, reportId: string, deps: AdvanceDeps = {}): Promise<JobState | null> {
   const now = deps.now ?? Date.now
@@ -58,9 +65,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
 
   const report = await db.getReport(reportId)
   if (!report) return null
-  if (report.status === 'done' || report.status === 'failed') {
-    return { status: report.status, phase: phaseOf(report.status, false), progress: report.progress, total: report.total, error: report.error ?? undefined }
-  }
+  if (report.status === 'done' || report.status === 'failed') return stateOf(report)
 
   const chat = await db.getChat(report.chatId)
   if (!chat) return null
@@ -72,21 +77,33 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   // Throws no_llm_key_configured (mapped to 503 by the route). Not counted as a failure.
   const provider = deps.provider ?? createProviderFromEnv(env)
 
+  const claim = await db.claimAttempt(reportId, MAX_FAILURES, LEASE_MS)
+  if (claim === null) return null
+  if (claim.outcome !== 'claimed') {
+    // done/failed meanwhile, or another advance holds the lease: report the current state, no LLM call
+    const current = await db.getReport(reportId)
+    return current ? stateOf(current, pending !== undefined) : null
+  }
+  if (claim.failures > MAX_FAILURES) {
+    // attempts were counted but never completed (crashes): stop retrying
+    await db.failReport(reportId, 'llm_error')
+    return { status: 'failed', phase: 'failed', progress: summarized, total, error: 'llm_error' }
+  }
+
   if (pending) {
     let summary: ChunkSummary
     try {
       summary = await summarizeChunk(provider, { index: pending.idx, fromId: 0, toId: 0, text: pending.text }, report.language)
     } catch (err) {
-      return recordFailure(db, report, err, { progress: summarized, pending: true })
+      return recordFailure(db, reportId, err, { progress: summarized, total, pending: true })
     }
     await db.saveSummary(report.chatId, pending.idx, summary)
     const progress = summarized + 1
-    await db.updateReport(reportId, { status: 'running', progress, total, error: null, failures: 0 })
+    await db.advanceProgress(reportId, { progress, total })
     return { status: 'running', phase: phaseOf('running', progress < total - 1), progress, total }
   }
 
   // All chunks are summarised: write the report.
-  await db.updateReport(reportId, { status: 'running', progress: summarized, total })
   const summaries = rows.map((r) => r.summary as ChunkSummary)
   let generated: GroupReport
   try {
@@ -100,7 +117,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
       subject: report.subject ?? undefined,
     })
   } catch (err) {
-    return recordFailure(db, report, err, { progress: summarized, pending: false })
+    return recordFailure(db, reportId, err, { progress: summarized, total, pending: false })
   }
 
   const parsed: ParsedChat = {
@@ -114,20 +131,27 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     dateOrder: 'mdy',
   }
   const content = verifyQuotes(generated, parsed)
-  await db.updateReport(reportId, { status: 'done', progress: total, total, content, error: null, failures: 0 })
+  const written = await db.finishReport(reportId, content, total)
+  if (!written) {
+    const current = await db.getReport(reportId)
+    return current ? stateOf(current) : null
+  }
   return { status: 'done', phase: 'done', progress: total, total }
+}
+
+function stateOf(r: { status: ReportStatus; progress: number; total: number; error: string | null }, pendingSummaries = false): JobState {
+  return { status: r.status, phase: phaseOf(r.status, pendingSummaries), progress: r.progress, total: r.total, error: r.error ?? undefined }
 }
 
 /** Records one failed LLM step. Only the short code is stored, never the provider's message. */
 async function recordFailure(
   db: ReturnType<typeof createDb>,
-  report: ReportRow,
+  reportId: string,
   err: unknown,
-  at: { progress: number; pending: boolean },
+  at: { progress: number; total: number; pending: boolean },
 ): Promise<JobState> {
   const code = err instanceof RateLimitError ? 'rate_limited' : 'llm_error'
-  const failures = report.failures + 1
-  const status: ReportStatus = failures >= MAX_FAILURES ? 'failed' : 'running'
-  await db.updateReport(report.id, { status, failures, error: code, progress: at.progress })
-  return { status, phase: phaseOf(status, at.pending), progress: at.progress, total: report.total, error: code }
+  const after = await db.failAttempt(reportId, code, MAX_FAILURES)
+  const status: ReportStatus = after?.status ?? 'running'
+  return { status, phase: phaseOf(status, at.pending), progress: at.progress, total: at.total, error: code }
 }

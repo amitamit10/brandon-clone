@@ -284,5 +284,12 @@ describe('review round 3: member allowlist, list-nested quotes, names inside the
     expect(out).toContain('> good morning all everyone')
     expect(out).not.toContain('\r')
   })
+
+  it('keeps at most 200 verified quote lines per report', () => {
+    const chat = mini([{ sender: 'Ana', text: 'good morning all everyone' }])
+    const body = Array.from({ length: 250 }, () => '> good morning all everyone').join('\n\n')
+    const out = verifyQuotes(withBody(body), chat).sections[0].body
+    expect(out.split('\n').filter((l) => l.startsWith('> '))).toHaveLength(200)
+  })
 })
 

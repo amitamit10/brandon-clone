@@ -32,6 +32,7 @@ const PROMPT_MEMBERS = 15
 const MAX_NAME_CHARS = 40
 const MAX_ASK_CHARS = 500
 const MIN_QUOTE_CHARS = 4
+const MAX_VERIFIED_QUOTES = 200
 
 const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
@@ -248,6 +249,7 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
     return hay !== undefined && hay.includes(n) ? clean : undefined
   }
 
+  let keptQuotes = 0
   const cleanBody = (body: string): string => {
     const out: string[] = []
     let needBlank = false
@@ -255,8 +257,9 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
     for (const line of body.replace(/\r\n?/g, '\n').split('\n')) {
       const qEnd = quotePrefixEnd(line)
       if (qEnd >= 0) {
-        const q = verified(line.slice(qEnd))
+        const q = keptQuotes < MAX_VERIFIED_QUOTES ? verified(line.slice(qEnd)) : undefined
         if (q !== undefined) {
+          keptQuotes++
           out.push(`> ${q}`)
           needBlank = true
         }

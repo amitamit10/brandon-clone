@@ -198,3 +198,22 @@ describe('retention is enforced on reads, not only by the cron', () => {
   })
 })
 
+describe('insertChat uses multi-row inserts', () => {
+  it('stores 400 chunks with a handful of statements', async () => {
+    let prepares = 0
+    const counting = new Proxy(DB, {
+      get(target, prop) {
+        if (prop === 'prepare') return (q: string) => (prepares++, target.prepare(q))
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop]
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v
+      },
+    })
+    const id = await createDb(counting).insertChat(newChat({ chunks: chunks(400) }))
+    expect(prepares).toBeLessThanOrEqual(20)
+    const rows = await createDb(DB).getChunks(id)
+    expect(rows).toHaveLength(400)
+    expect(rows.map((r) => r.idx)).toEqual(Array.from({ length: 400 }, (_, i) => i))
+    expect(rows[399].text).toContain('chunk 399')
+  })
+})
+

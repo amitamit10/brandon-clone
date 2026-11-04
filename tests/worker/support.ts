@@ -1,5 +1,6 @@
 import schema1 from '../../migrations/0001_init.sql?raw'
 import schema2 from '../../migrations/0002_report_failures.sql?raw'
+import schema3 from '../../migrations/0003_report_lease.sql?raw'
 import type { LlmProvider, LlmRequest } from '../../src/llm/provider'
 import { chunkMessages } from '../../src/pipeline/chunk'
 import { computeStats } from '../../src/stats/compute'
@@ -7,7 +8,7 @@ import type { ParsedChat } from '../../src/shared/types'
 
 /** Applies every migration in order (test-only; production uses wrangler migrations). */
 export async function applyMigrations(db: D1Database): Promise<void> {
-  for (const sql of [schema1, schema2]) {
+  for (const sql of [schema1, schema2, schema3]) {
     const statements = sql
       .split(';')
       .map((s) => s.trim())

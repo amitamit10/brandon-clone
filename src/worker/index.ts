@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono'
 import type { LlmProvider } from '../llm/provider'
 import { advanceReport } from './jobs'
 import { createDb, randomId, type ReportRow } from './db'
-import { checkRateLimit, deleteOldRateRows, hashIp, retryAfterSeconds } from './ratelimit'
+import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
 
 export interface Env {
@@ -123,7 +123,7 @@ export function createApp(deps: AppDeps = {}) {
   /** Counts one hit for this client IP in bucket. Refused hits get 429 with Retry-After. */
   async function limit(c: Context<{ Bindings: Env }>, bucket: string, perHour: number) {
     const ip = c.req.header('CF-Connecting-IP') ?? 'unknown'
-    const ok = await checkRateLimit(c.env.DB, await hashIp(ip), bucket, now(), { perHour })
+    const ok = await checkRateLimit(c.env.DB, await hashIp(ipBucketKey(ip)), bucket, now(), { perHour })
     if (!ok) {
       c.header('Retry-After', String(retryAfterSeconds(now())))
       throw new ApiError(429, 'rate_limited')

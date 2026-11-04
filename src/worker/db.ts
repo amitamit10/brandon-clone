@@ -52,6 +52,13 @@ export interface ReportRow {
 
 /** Statements per D1 batch. Keeps each batch well under D1 limits; a batch is atomic. */
 const BATCH = 50
+const ROWS_PER_INSERT = 33
+
+function chunkRows<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
 
 /** Random 128-bit id as 32 lowercase hex characters. Used for chat, report and share ids. */
 export function randomId(): string {
@@ -171,8 +178,12 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
         d1
           .prepare('INSERT INTO chats (id, name, participants_json, stats_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
           .bind(id, c.name, JSON.stringify(c.participants), JSON.stringify(c.stats), Date.now(), c.expiresAt),
-        ...c.chunks.map((ch) =>
-          d1.prepare('INSERT INTO chat_chunks (chat_id, idx, text, summary_json) VALUES (?, ?, ?, NULL)').bind(id, ch.index, ch.text),
+        // Multi-row inserts keep the statement count low (D1 free plan: 50 queries per request) and
+        // stay under 100 bound parameters per statement (3 per row).
+        ...chunkRows(c.chunks, ROWS_PER_INSERT).map((rows) =>
+          d1
+            .prepare(`INSERT INTO chat_chunks (chat_id, idx, text, summary_json) VALUES ${rows.map(() => '(?, ?, ?, NULL)').join(', ')}`)
+            .bind(...rows.flatMap((ch) => [id, ch.index, ch.text])),
         ),
       ]
       // The chat row goes first (chunks reference it). Each batch is atomic.
@@ -235,6 +246,75 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
         .bind(id, now())
         .first<ReportDbRow>()
       return row ? toReport(row) : null
+    },
+
+    /**
+     * Claims one attempt on a report BEFORE the model is called: failures + 1 and a lease, in one atomic
+     * statement, only while the report is open and nobody else holds an unexpired lease. A crash after
+     * this point therefore still counts as a failed attempt. 'busy' = someone else holds the lease,
+     * 'closed' = done or failed, null = no such report (or its chat expired).
+     */
+    async claimAttempt(
+      id: string,
+      _maxFailures: number,
+      leaseMs: number,
+    ): Promise<{ outcome: 'claimed'; failures: number } | { outcome: 'busy' } | { outcome: 'closed' } | null> {
+      const t = now()
+      const row = await d1
+        .prepare(
+          "UPDATE reports SET failures = failures + 1, lease_until = ?, status = 'running' " +
+            "WHERE id = ? AND status NOT IN ('done', 'failed') AND (lease_until IS NULL OR lease_until <= ?) " +
+            'AND chat_id IN (SELECT id FROM chats WHERE expires_at > ?) RETURNING failures',
+        )
+        .bind(t + leaseMs, id, t, t)
+        .first<{ failures: number }>()
+      if (row) return { outcome: 'claimed', failures: row.failures }
+      const current = await this.getReport(id)
+      if (!current) return null
+      return current.status === 'done' || current.status === 'failed' ? { outcome: 'closed' } : { outcome: 'busy' }
+    },
+
+    /** A successful step: progress up, failure counter reset, lease released. Only while the report is open. */
+    async advanceProgress(id: string, p: { progress: number; total: number }): Promise<boolean> {
+      const res = await d1
+        .prepare(
+          "UPDATE reports SET progress = ?, total = ?, failures = 0, error = NULL, lease_until = NULL, status = 'running' " +
+            "WHERE id = ? AND status NOT IN ('done', 'failed')",
+        )
+        .bind(p.progress, p.total, id)
+        .run()
+      return res.meta.changes > 0
+    },
+
+    /** The final write. Only while the report is open, so a late call cannot overwrite a failed report. */
+    async finishReport(id: string, content: GroupReport, total: number): Promise<boolean> {
+      const res = await d1
+        .prepare(
+          "UPDATE reports SET status = 'done', progress = ?, total = ?, content_json = ?, error = NULL, failures = 0, lease_until = NULL " +
+            "WHERE id = ? AND status NOT IN ('done', 'failed')",
+        )
+        .bind(total, total, JSON.stringify(content), id)
+        .run()
+      return res.meta.changes > 0
+    },
+
+    /** Records a failed attempt (the attempt was already counted by claimAttempt) and releases the lease. */
+    async failAttempt(id: string, code: string, maxFailures: number): Promise<{ status: ReportStatus; progress: number } | null> {
+      return d1
+        .prepare(
+          "UPDATE reports SET error = ?, lease_until = NULL, status = CASE WHEN failures >= ? THEN 'failed' ELSE 'running' END " +
+            "WHERE id = ? AND status NOT IN ('done', 'failed') RETURNING status, progress",
+        )
+        .bind(code, maxFailures, id)
+        .first<{ status: ReportStatus; progress: number }>()
+    },
+
+    /** Marks a report failed outright (for example after too many counted attempts). */
+    async failReport(id: string, code: string): Promise<void> {
+      await d1
+        .prepare("UPDATE reports SET status = 'failed', error = ?, lease_until = NULL WHERE id = ? AND status <> 'done'")
+        .bind(code, id)
+        .run()
     },
 
     /** Updates only the known fields in patch. Other keys are ignored. undefined is skipped. */
