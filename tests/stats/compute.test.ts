@@ -115,4 +115,16 @@ describe('assertAnalyzable', () => {
   it('accepts 30 messages from two senders', () => {
     expect(codeOf(() => assertAnalyzable(manyChat(30, ['Ana', 'Ben'])))).toBeNull()
   })
+
+  it('handles senders named like Object.prototype members without corrupting stats', () => {
+    const names = ['__proto__', 'constructor', 'toString', 'hasOwnProperty']
+    const s = computeStats(manyChat(40, names))
+    expect(Object.keys(s.perMember).sort()).toEqual([...names].sort())
+    for (const n of names) {
+      expect(Object.prototype.hasOwnProperty.call(s.perMember, n)).toBe(true)
+      expect(s.perMember[n].messages).toBe(10)
+      expect(typeof s.perMember[n].busiestHour).toBe('number')
+    }
+    expect(({} as Record<string, unknown>).messages).toBeUndefined()
+  })
 })

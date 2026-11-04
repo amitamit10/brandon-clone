@@ -63,11 +63,12 @@ export function computeStats(chat: ParsedChat, opts?: { conversationGapMs?: numb
   if (messages.length === 0) throw new ParseError('too_small', 'no messages to analyse')
   const gapMs = opts?.conversationGapMs ?? DEFAULT_CONVERSATION_GAP_MS
 
-  const perMember: Record<string, MemberStats> = {}
-  const emojiCounts: Record<string, Map<string, number>> = {}
-  const hourCounts: Record<string, number[]> = {}
-  const replySum: Record<string, number> = {}
-  const replyN: Record<string, number> = {}
+  // Sender names are untrusted (e.g. "__proto__", "constructor"): keep these records prototype-less.
+  const perMember: Record<string, MemberStats> = Object.create(null)
+  const emojiCounts: Record<string, Map<string, number>> = Object.create(null)
+  const hourCounts: Record<string, number[]> = Object.create(null)
+  const replySum: Record<string, number> = Object.create(null)
+  const replyN: Record<string, number> = Object.create(null)
 
   const hourHistogram = new Array<number>(24).fill(0)
   const weekdayHistogram = new Array<number>(7).fill(0)
