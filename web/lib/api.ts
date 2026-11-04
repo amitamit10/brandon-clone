@@ -63,18 +63,18 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return data as T
 }
 
-function requireId(data: unknown): string {
-  const id = (data as { id?: unknown } | null)?.id
+function requireId(data: unknown, key: 'chatId' | 'reportId'): string {
+  const id = (data as Record<string, unknown> | null)?.[key]
   if (typeof id !== 'string' || id.length === 0) throw new ApiError(500, 'bad_response')
   return id
 }
 
 /** Stores an analysed chat. Resolves with the new chat id. */
 export async function uploadChat(body: UploadChatBody): Promise<string> {
-  return requireId(await postJson<unknown>('/api/chats', body))
+  return requireId(await postJson<unknown>('/api/chats', body), 'chatId')
 }
 
 /** Starts a report for a stored chat. Resolves with the new report id. */
 export async function createReport(chatId: string, body: CreateReportBody): Promise<string> {
-  return requireId(await postJson<unknown>(`/api/chats/${encodeURIComponent(chatId)}/reports`, body))
+  return requireId(await postJson<unknown>(`/api/chats/${encodeURIComponent(chatId)}/reports`, body), 'reportId')
 }

@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe('api helpers', () => {
   it('uploadChat posts JSON and resolves with the chat id', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({ id: 'c1' }) }))
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({ chatId: 'c1' }) }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(uploadChat(body)).resolves.toBe('c1')
@@ -28,7 +28,7 @@ describe('api helpers', () => {
   })
 
   it('createReport posts to the chat-scoped route', async () => {
-    const fetchMock = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({ id: 'r1' }) }))
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 201, json: async () => ({ reportId: 'r1' }) }))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(createReport('c1', { persona: 'clara', language: 'Hebrew', me: 'Ana', kind: 'group' })).resolves.toBe('r1')

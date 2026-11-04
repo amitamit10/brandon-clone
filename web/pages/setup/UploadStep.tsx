@@ -37,6 +37,11 @@ export function UploadStep({ analysed, fileName, onAnalysed }: UploadStepProps) 
     }
   }
 
+  const onDragOver = (e: DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    setDragging(true)
+  }
+
   const onDrop = (e: DragEvent<HTMLLabelElement>) => {
     e.preventDefault()
     setDragging(false)
@@ -65,7 +70,7 @@ export function UploadStep({ analysed, fileName, onAnalysed }: UploadStepProps) 
       </div>
 
       {analysed ? (
-        <label className="drop-ready">
+        <label className="drop-ready" onDragOver={onDragOver} onDragLeave={() => setDragging(false)} onDrop={onDrop}>
           {fileInput}
           <span className="small" style={{ fontWeight: 700 }}>
             {fileName}
@@ -83,10 +88,7 @@ export function UploadStep({ analysed, fileName, onAnalysed }: UploadStepProps) 
       ) : (
         <label
           className={`drop${dragging ? ' is-dragging' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDragging(true)
-          }}
+          onDragOver={onDragOver}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >

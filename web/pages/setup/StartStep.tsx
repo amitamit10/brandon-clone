@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PersonaId } from '../../../src/shared/types'
 import type { Analyzed } from '../../lib/analyze'
@@ -19,6 +19,8 @@ export function StartStep({ groupName, analysed, me, persona, language }: StartS
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Kept across retries so a failed report call does not upload the chat a second time.
+  const savedChatId = useRef<string | null>(null)
   const name = groupName.trim()
   const ready = name.length > 0 && me !== null && language !== null
 
@@ -27,12 +29,16 @@ export function StartStep({ groupName, analysed, me, persona, language }: StartS
     setBusy(true)
     setError(null)
     try {
-      const chatId = await uploadChat({
-        name,
-        participants: analysed.chat.participants,
-        stats: analysed.stats,
-        chunks: analysed.chunks,
-      })
+      let chatId = savedChatId.current
+      if (!chatId) {
+        chatId = await uploadChat({
+          name,
+          participants: analysed.chat.participants,
+          stats: analysed.stats,
+          chunks: analysed.chunks,
+        })
+        savedChatId.current = chatId
+      }
       const reportId = await createReport(chatId, { persona, language, me, kind: 'group' })
       // Ids and a name only. The chat text never leaves memory in the browser.
       addHistory({ chatId, reportId, name, createdAt: Date.now() })

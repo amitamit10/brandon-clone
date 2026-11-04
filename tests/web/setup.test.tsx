@@ -173,8 +173,8 @@ describe('setup wizard', () => {
   it('starting a report calls both endpoints, stores only ids, and opens the report route', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn(async (url: string) => {
-      if (url === '/api/chats') return jsonResponse(201, { id: 'chat-1' })
-      if (url === '/api/chats/chat-1/reports') return jsonResponse(201, { id: 'rep-1' })
+      if (url === '/api/chats') return jsonResponse(201, { chatId: 'chat-1' })
+      if (url === '/api/chats/chat-1/reports') return jsonResponse(201, { reportId: 'rep-1' })
       return jsonResponse(404, {})
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -223,8 +223,8 @@ describe('setup wizard', () => {
       'fetch',
       vi.fn(async (url: string) =>
         url === '/api/chats'
-          ? jsonResponse(201, { id: 'chat-2' })
-          : jsonResponse(201, { id: 'rep-2' }),
+          ? jsonResponse(201, { chatId: 'chat-2' })
+          : jsonResponse(201, { reportId: 'rep-2' }),
       ),
     )
     renderAt('/setup')
@@ -258,6 +258,27 @@ describe('setup wizard', () => {
     await user.click(screen.getByRole('button', { name: 'Create my report' }))
 
     expect((await screen.findByRole('alert')).textContent).toContain("We couldn't reach the server")
+  })
+
+  it('retrying after a failed report call does not upload the chat again', async () => {
+    const user = userEvent.setup()
+    let reportCalls = 0
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/chats') return jsonResponse(201, { chatId: 'chat-3' })
+      reportCalls++
+      return reportCalls === 1 ? jsonResponse(503, {}) : jsonResponse(201, { reportId: 'rep-3' })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderAt('/setup')
+    await walkToStart(user)
+    await user.click(screen.getByRole('button', { name: 'Create my report' }))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/busy right now/)
+
+    await user.click(screen.getByRole('button', { name: 'Create my report' }))
+    expect(await screen.findByText('Report page coming in Task 11')).toBeTruthy()
+
+    const urls = fetchMock.mock.calls.map((c) => (c as unknown as [string])[0])
+    expect(urls).toEqual(['/api/chats', '/api/chats/chat-3/reports', '/api/chats/chat-3/reports'])
   })
 
   it('goes back to the landing page from step 1', async () => {
