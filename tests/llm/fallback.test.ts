@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   createFallbackProvider,
+  MAX_RETRY_WAIT_MS,
   generateJson,
   RateLimitError,
   type LlmProvider,
@@ -93,5 +94,25 @@ describe('generateJson', () => {
     const a = scripted('a', [boom])
     await expect(generateJson(a.provider, req, validate)).rejects.toBe(boom)
     expect(a.calls).toHaveLength(1)
+  })
+
+  it('rethrows at once when Retry-After exceeds the wait cap instead of sleeping', async () => {
+    const hour = 3_600_000
+    const a = scripted('a', [new RateLimitError('429', hour)])
+    const sleep = vi.fn(async () => {})
+    const p = createFallbackProvider([a.provider], { retries: 3, sleep })
+    const err = await p.generate(req).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(RateLimitError)
+    expect((err as RateLimitError).retryAfterMs).toBe(hour)
+    expect(sleep).not.toHaveBeenCalled()
+    expect(a.calls).toHaveLength(1)
+  })
+
+  it('still sleeps for a Retry-After at or under the cap', async () => {
+    const a = scripted('a', [new RateLimitError('429', MAX_RETRY_WAIT_MS), 'ok'])
+    const sleep = vi.fn(async () => {})
+    const p = createFallbackProvider([a.provider], { retries: 3, sleep })
+    expect(await p.generate(req)).toEqual({ text: 'ok' })
+    expect(sleep).toHaveBeenCalledWith(MAX_RETRY_WAIT_MS)
   })
 })

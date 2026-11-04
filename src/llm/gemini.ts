@@ -1,4 +1,4 @@
-import { parseRetryAfterMs, RateLimitError, type LlmProvider, type LlmRequest } from './provider'
+import { LLM_FETCH_TIMEOUT_MS, parseRetryAfterMs, RateLimitError, type LlmProvider, type LlmRequest } from './provider'
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
@@ -13,6 +13,7 @@ export class GeminiProvider implements LlmProvider {
     // The key goes in a header only. Errors never include the URL, headers or body.
     const res = await globalThis.fetch(`${ENDPOINT}/${this.model}:generateContent`, {
       method: 'POST',
+      signal: AbortSignal.timeout(LLM_FETCH_TIMEOUT_MS),
       headers: { 'content-type': 'application/json', 'x-goog-api-key': this.apiKey },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: req.system }] },

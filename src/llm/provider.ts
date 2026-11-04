@@ -31,6 +31,10 @@ export function parseRetryAfterMs(value: string | null, now: number = Date.now()
 }
 
 const BACKOFF_BASE_MS = 1000
+/** Longest we will sleep inside one call. A longer Retry-After is surfaced so the caller can resume later. */
+export const MAX_RETRY_WAIT_MS = 30_000
+/** Upper bound for a single upstream HTTP call. */
+export const LLM_FETCH_TIMEOUT_MS = 60_000
 
 /**
  * Tries providers in order. Any error falls through to the next provider.
@@ -58,11 +62,9 @@ export function createFallbackProvider(
           }
         }
         if (round < rounds - 1) {
-          const wait =
-            lastError instanceof RateLimitError && lastError.retryAfterMs !== undefined
-              ? lastError.retryAfterMs
-              : BACKOFF_BASE_MS * 2 ** round
-          await opts.sleep(wait)
+          const hinted = lastError instanceof RateLimitError ? lastError.retryAfterMs : undefined
+          if (hinted !== undefined && hinted > MAX_RETRY_WAIT_MS) throw lastError
+          await opts.sleep(hinted ?? BACKOFF_BASE_MS * 2 ** round)
         }
       }
       throw lastError
