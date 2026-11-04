@@ -15,7 +15,7 @@ export default defineConfig({
       },
       {
         plugins: [react()],
-        test: { name: 'web', environment: 'jsdom', include: ['tests/web/**/*.test.tsx'] },
+        test: { name: 'web', environment: 'jsdom', include: ['tests/web/**/*.test.{ts,tsx}'] },
       },
     ],
   },
