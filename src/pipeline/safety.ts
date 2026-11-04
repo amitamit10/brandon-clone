@@ -30,12 +30,29 @@ export function safeLanguage(lang: string): string {
   return /^[\p{L}\p{M} ()-]{2,40}$/u.test(lang.trim()) ? lang.trim() : 'English'
 }
 
-/** Removes things that must never come out of the model: images, links, URLs, raw HTML. */
-export function sanitizeModelText(s: string): string {
+function sanitizePass(s: string): string {
   return s
-    .replace(/!\[[^\]\n]{0,200}\]\([^)\n]{0,500}\)/g, '')
-    .replace(/\[([^\]\n]{0,200})\]\([^)\n]{0,500}\)/g, '$1')
-    .replace(/<\/?[a-zA-Z][^>\n]{0,200}>/g, '')
+    .replace(/!\[[^\]\n]{0,200}\]\([^)\n]{0,500}\)/g, '') // inline images
+    .replace(/!\[[^\]\n]{0,200}\]\[[^\]\n]{0,200}\]/g, '') // reference-style images
+    .replace(/^ {0,3}\[[^\]\n]{1,200}\]:[^\n]{0,600}$/gm, '') // reference definitions
+    .replace(/\[([^\]\n]{0,200})\]\([^)\n]{0,500}\)/g, '$1') // inline links keep their text
+    .replace(/<\/?[a-zA-Z][^>\n]{0,200}>/g, '') // HTML tags
     .replace(/\b(?:https?|ftp):\/\/\S+/gi, '[link removed]')
+    .replace(/(^|[\s(])(?:www\.|\/\/)[^\s)]{1,300}/gi, '$1[link removed]')
     .replace(/\b(?:javascript|data|vbscript):\S*/gi, '')
+}
+
+/**
+ * Removes things that must never come out of the model: images, links, URLs, raw HTML.
+ * Repeats until the text stops changing (so nested fragments cannot rebuild a tag). This is defence
+ * in depth only: the UI must still render model text as plain text with no raw HTML and no remote images.
+ */
+export function sanitizeModelText(s: string): string {
+  let cur = s
+  for (let i = 0; i < 4; i++) {
+    const next = sanitizePass(cur)
+    if (next === cur) return next
+    cur = next
+  }
+  return cur
 }

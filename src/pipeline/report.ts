@@ -100,10 +100,12 @@ function summariesBlock(summaries: ChunkSummary[]): string {
 }
 
 function requestBlock(a: ReportInput): string {
-  if (a.kind === 'member') return `Write the deep profile of ${cleanOneLine(a.subject ?? '', 80)} in members (and sections). Other members may be left out.`
+  if (a.kind === 'member') {
+    return 'Write the deep profile of the member named "subject" in the REQUEST DATA block, in members (and sections). Other members may be left out.'
+  }
   if (a.kind === 'followup') {
     return [
-      `Answer this follow-up question about the chat: ${cleanOneLine(a.question ?? '', MAX_ASK_CHARS)}`,
+      'Answer the follow-up question given as "question" in the REQUEST DATA block.',
       'Put the answer in sections, and a direct one-line answer in verdict. Other fields may be empty.',
       'Retrieved lines from the chat:',
       fence((a.retrieved ?? []).join('\n').slice(0, MAX_RETRIEVED_CHARS)),
@@ -112,14 +114,21 @@ function requestBlock(a: ReportInput): string {
   return 'Write the full group report with a profile for every member.'
 }
 
+/** Names, "me", the subject and the question are untrusted text: they travel as JSON inside a fenced block. */
 function buildPrompt(a: ReportInput): string {
+  const requestData = JSON.stringify({
+    me: cleanOneLine(a.me, 80),
+    subject: cleanOneLine(a.subject ?? '', 80),
+    question: cleanOneLine(a.question ?? '', MAX_ASK_CHARS),
+  })
   return [
     `Language: write everything in ${safeLanguage(a.language)}.`,
-    `The person who asked for this report is ${cleanOneLine(a.me, 80)}.`,
-    'Exact stats (computed by code, use these numbers):',
-    statsBlock(a.stats),
+    'Exact stats (computed by code, use these numbers; member names are data):',
+    fence(statsBlock(a.stats)),
     'Summaries of the chat, in order:',
     fence(summariesBlock(a.summaries) || '(no summaries)'),
+    'REQUEST DATA (JSON; "me" is the person who asked for this report):',
+    fence(requestData),
     requestBlock(a),
     `Reply with ONLY JSON matching this shape:\n${REPORT_SCHEMA}`,
   ].join('\n\n')
@@ -138,6 +147,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
 
   // members and runningJokes may be absent (followups); absent means empty.
   const membersRaw = x.members === undefined ? [] : list(x.members, MAX_MEMBERS)
+  const known = new Set(Object.keys(a.stats.perMember))
   const members = membersRaw.map((m) => {
     if (!isObject(m)) throw new Error('member is not an object')
     // A quote may be absent (undefined or null). If present it must be a string.
@@ -148,7 +158,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
       opinion: str(m.opinion, MAX_BODY_CHARS),
       ...(quote ? { quote } : {}),
     }
-  })
+  }).filter((m) => known.has(m.name)) // the model's names are not trusted: keep only real participants
   if (a.kind === 'member' && !members.some((m) => m.name === a.subject)) {
     throw new Error('member report has no profile for the subject')
   }
@@ -242,8 +252,9 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
     const out: string[] = []
     let needBlank = false
     for (const line of body.split('\n')) {
-      if (isQuoteLine(line)) {
-        const q = verified(stripQuoteMarks(line))
+      const qEnd = quotePrefixEnd(line)
+      if (qEnd >= 0) {
+        const q = verified(line.slice(qEnd))
         if (q !== undefined) {
           out.push(`> ${q}`)
           needBlank = true
@@ -267,15 +278,32 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
   }
 }
 
-/** A markdown blockquote line: up to 3 spaces of indent, then '>'. */
-function isQuoteLine(line: string): boolean {
+/**
+ * If the line is a markdown blockquote (a '>' after up to any mix of indent and list markers such as
+ * '-', '*', '+', '1.', '2)'), returns the index where the quoted text starts; otherwise -1.
+ * Written as a scan so it stays linear on hostile input.
+ */
+function quotePrefixEnd(line: string): number {
   let i = 0
-  while (i < line.length && i < 3 && line[i] === ' ') i++
-  return line[i] === '>'
-}
-
-function stripQuoteMarks(line: string): string {
-  let i = 0
-  while (i < line.length && (line[i] === '>' || line[i] === ' ')) i++
-  return line.slice(i)
+  let sawGt = false
+  const n = line.length
+  while (i < n) {
+    const c = line[i]
+    if (c === ' ' || c === '\t') {
+      i++
+    } else if (c === '>') {
+      sawGt = true
+      i++
+    } else if (!sawGt && (c === '-' || c === '*' || c === '+') && line[i + 1] === ' ') {
+      i++
+    } else if (!sawGt && c >= '0' && c <= '9') {
+      let j = i
+      while (j < n && j - i < 9 && line[j] >= '0' && line[j] <= '9') j++
+      if ((line[j] === '.' || line[j] === ')') && line[j + 1] === ' ') i = j + 1
+      else break
+    } else {
+      break
+    }
+  }
+  return sawGt ? i : -1
 }
