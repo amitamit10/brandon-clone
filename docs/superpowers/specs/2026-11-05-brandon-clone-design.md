@@ -66,4 +66,4 @@ Personal use with friends. The original is a paid, polished product, and the use
 ## Open items
 - iPhone export sample (optional but recommended).
 - Visual recon of setup steps 2-7, with nothing submitted.
-- Whether shared links should show real member names or let the owner mask them first.
+- ~~Shared-link name masking~~ Decided by the user: shared links show real member names, no masking.
