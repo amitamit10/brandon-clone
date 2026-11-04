@@ -118,9 +118,27 @@ describe('POST /api/chats (upload)', () => {
     expect(await res.json()).toEqual({ error: 'too_large' })
   })
 
-  it('rejects a body over 10 MB with 413 by its actual size', async () => {
+  it('rejects a body over 10 MB with 413 by its actual size, even with no content-length', async () => {
     const app = createApp({ provider: fakeProvider() })
-    const res = await send(app, 'POST', '/api/chats', { raw: 'a'.repeat(10 * MB + 1) })
+    // A stream body has no declared length, so only the byte counter in readBounded can refuse it.
+    const piece = new TextEncoder().encode('a'.repeat(MB))
+    let sent = 0
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent >= 10) return controller.close()
+        sent++
+        controller.enqueue(piece)
+        if (sent === 10) controller.enqueue(new Uint8Array([97])) // 10 MB + 1 byte
+      },
+    })
+    const request = new Request('http://example.com/api/chats', {
+      method: 'POST',
+      headers: { 'CF-Connecting-IP': currentIp, 'content-type': 'application/json' },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit)
+    expect(request.headers.get('content-length')).toBeNull()
+    const res = await Promise.resolve(app.request(request, undefined, ENV))
     expect(res.status).toBe(413)
   })
 
@@ -140,7 +158,9 @@ describe('POST /api/chats (upload)', () => {
     const app = createApp({ provider: fakeProvider() })
     const good = uploadBody(chatWith(40))
     const cases: [string, string][] = [
-      ['NaN in a number', JSON.stringify(good).replace('"total":40', '"total":NaN')],
+      ['NaN literal (invalid JSON)', JSON.stringify(good).replace('"total":40', '"total":NaN')],
+      ['1e999 parses to Infinity', JSON.stringify(good).replace('"total":40', '"total":1e999')],
+      ['-1e999 firstTs', JSON.stringify(good).replace(/"firstTs":(\d+)/, '"firstTs":-1e999')],
       ['string number', JSON.stringify({ ...good, stats: { ...good.stats, total: '40' } })],
       ['perMember key not a participant', JSON.stringify({ ...good, stats: { ...good.stats, perMember: { ...good.stats.perMember, Zed: good.stats.perMember.Ana } } })],
       ['__proto__ key not a participant', JSON.stringify(good).replace('"perMember":{', `"perMember":{"__proto__":${JSON.stringify(good.stats.perMember.Ana)},`)],

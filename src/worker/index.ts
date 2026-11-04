@@ -242,14 +242,21 @@ export function createApp(deps: AppDeps = {}) {
   return app
 }
 
-/** Cron: removes expired chats and old rate rows. Failures are swallowed; the next run retries. */
+/**
+ * Cron: removes expired chats, then old rate rows. Each step has its own try, so one failing does not
+ * skip the other, and nothing is thrown out of the handler. The next run retries.
+ */
 export async function scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+  const at = Date.now()
   try {
-    const at = Date.now()
     await createDb(env.DB, () => at).deleteExpired(at)
+  } catch {
+    console.warn('scheduled_expired_cleanup_failed')
+  }
+  try {
     await deleteOldRateRows(env.DB, at)
   } catch {
-    console.warn('scheduled_cleanup_failed')
+    console.warn('scheduled_rate_cleanup_failed')
   }
 }
 
