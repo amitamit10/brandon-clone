@@ -1,0 +1,7 @@
+# private chat exports — never commit
+samples/
+node_modules/
+.dev.vars
+.env*
+.wrangler/
+dist/
