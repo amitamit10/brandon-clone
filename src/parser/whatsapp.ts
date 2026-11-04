@@ -10,7 +10,7 @@ const IOS = new RegExp(String.raw`^\[${DATE},? ${TIME}\] (.*)$`)
 
 const MEDIA = /^<?(media|image|video|audio|sticker|gif|document|contact card|voice call|video call)( omitted)?>?$|^<Media omitted>$|^(image|video|audio|sticker|GIF|document) omitted$/i
 const DELETED = /^(This message was deleted|You deleted this message)\.?$/
-const EDITED_SUFFIX = /\s*<This message was edited>$/
+const EDITED_SUFFIX = '<This message was edited>'
 
 interface Header {
   a: number
@@ -83,9 +83,10 @@ export function parseExport(text: string): ParsedChat {
       systemEvents.push({ ts: e.ts, text: e.text.trim() })
       continue
     }
-    let body = e.text.replace(/\n+$/, '')
-    const edited = EDITED_SUFFIX.test(body)
-    if (edited) body = body.replace(EDITED_SUFFIX, '')
+    // Linear string ops only (no backtracking regex on untrusted input).
+    let body = e.text.trimEnd()
+    const edited = body.endsWith(EDITED_SUFFIX)
+    if (edited) body = body.slice(0, -EDITED_SUFFIX.length)
     const trimmed = body.trim()
     const kind: Message['kind'] = DELETED.test(trimmed) ? 'deleted' : MEDIA.test(trimmed) ? 'media' : 'text'
     if (!participants.includes(e.sender)) participants.push(e.sender)

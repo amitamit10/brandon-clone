@@ -93,4 +93,18 @@ describe('parseExport', () => {
       }
     }
   })
+
+  it('stays linear on pathological whitespace (no regex backtracking)', () => {
+    const t0 = Date.now()
+    const c = parseExport('8/28/25, 23:29 - A: x' + ' '.repeat(200_000) + 'y\n8/28/25, 23:30 - B: z' + '\n'.repeat(200_000) + 'w\n')
+    expect(Date.now() - t0).toBeLessThan(1000)
+    expect(c.messages).toHaveLength(2)
+    expect(c.messages[1].text.startsWith('z')).toBe(true)
+  })
+
+  it('does not treat a mid-text edited marker as an edit and still strips a trailing one with spaces', () => {
+    const c = parseExport('8/28/25, 23:29 - A: <This message was edited> not at end\n8/28/25, 23:30 - A: hello   <This message was edited>  \n')
+    expect(c.messages[0]).toMatchObject({ text: '<This message was edited> not at end', edited: false })
+    expect(c.messages[1]).toMatchObject({ text: 'hello', edited: true })
+  })
 })
