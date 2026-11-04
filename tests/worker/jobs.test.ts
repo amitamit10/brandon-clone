@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createDb } from '../../src/worker/db'
-import { advanceReport, MAX_FAILURES } from '../../src/worker/jobs'
+import { advanceReport, MAX_FAILURES, RETRIEVED_MAX_CHARS, retrievedLines } from '../../src/worker/jobs'
 import type { Env } from '../../src/worker/index'
 import { applyMigrations, chatWith, fakeProvider, uploadBody } from './support'
 
@@ -79,5 +79,24 @@ describe('advanceReport claims and leases', () => {
     expect(await db.advanceProgress(reportId, { progress: 1, total: 3 })).toBe(false)
     expect(await db.finishReport(reportId, { title: 'x' } as never, 3)).toBe(false)
     expect(await db.getReport(reportId)).toMatchObject({ status: 'failed' })
+  })
+})
+
+describe('retrievedLines', () => {
+  it('keeps chunk order by idx, drops day headers and blank lines', () => {
+    const lines = retrievedLines([
+      { idx: 2, text: '--- 2025-08-02 ---\n09:00 Ben: later\n' },
+      { idx: 0, text: '--- 2025-08-01 ---\n10:00 Ana: first\r\n\n10:01 Ben: second' },
+    ])
+    expect(lines).toEqual(['10:00 Ana: first', '10:01 Ben: second', '09:00 Ben: later'])
+  })
+
+  it('stops before the total passes RETRIEVED_MAX_CHARS, keeping the earliest lines', () => {
+    const line = 'x'.repeat(999)
+    const text = Array.from({ length: 20 }, () => line).join('\n')
+    const lines = retrievedLines([{ idx: 0, text }])
+    const total = lines.reduce((n, l) => n + l.length + 1, 0)
+    expect(total).toBeLessThanOrEqual(RETRIEVED_MAX_CHARS)
+    expect(lines.length).toBe(Math.floor(RETRIEVED_MAX_CHARS / 1000))
   })
 })

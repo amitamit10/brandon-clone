@@ -14,6 +14,7 @@ import { createProviderFromEnv } from '../llm/index'
 import { generateReport, verifyQuotes } from '../pipeline/report'
 import { reconstructMessages } from '../pipeline/reconstruct'
 import { summarizeChunk } from '../pipeline/summarize'
+import { searchChunks } from '../pipeline/search'
 import type { ChunkSummary, GroupReport, ParsedChat } from '../shared/types'
 import { createDb, type ReportStatus } from './db'
 import type { Env } from './index'
@@ -44,6 +45,32 @@ const phaseOf = (status: ReportStatus, pendingSummaries: boolean): JobPhase => {
 
 /** How long one advance may hold a report. A crashed holder is retried after this. */
 export const LEASE_MS = 120_000
+
+/** Chunks retrieved for a follow-up question. */
+export const RETRIEVE_K = 3
+/** Total characters of retrieved lines sent with a follow-up. */
+export const RETRIEVED_MAX_CHARS = 8_000
+const DAY_HEADER = /^--- \d{4}-\d{2}-\d{2} ---$/
+
+/**
+ * The lines of the retrieved chunks, in chunk order (idx), without the '--- date ---' headers and
+ * without blank lines. Stops before the total would pass RETRIEVED_MAX_CHARS, so the lines kept are
+ * always the earliest ones in chunk order.
+ */
+export function retrievedLines(hits: { idx: number; text: string }[]): string[] {
+  const out: string[] = []
+  let size = 0
+  for (const hit of [...hits].sort((a, b) => a.idx - b.idx)) {
+    for (const raw of hit.text.split('\n')) {
+      const line = raw.replace(/\r$/, '')
+      if (line.trim() === '' || DAY_HEADER.test(line)) continue
+      if (size + line.length + 1 > RETRIEVED_MAX_CHARS) return out
+      out.push(line)
+      size += line.length + 1
+    }
+  }
+  return out
+}
 
 /**
  * Advances a report by at most ONE LLM call. If some chunk has no stored summary, that chunk is
@@ -103,8 +130,11 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     return { status: 'running', phase: phaseOf('running', progress < total - 1), progress, total }
   }
 
-  // All chunks are summarised: write the report.
+  // All chunks are summarised: write the report. A follow-up first retrieves the chunks that match its question.
   const summaries = rows.map((r) => r.summary as ChunkSummary)
+  const followup = report.kind === 'followup'
+  const question = followup ? (report.question ?? '') : undefined
+  const retrieved = followup ? retrievedLines(searchChunks(rows.map((r) => ({ idx: r.idx, text: r.text })), question ?? '', RETRIEVE_K)) : undefined
   let generated: GroupReport
   try {
     generated = await generateReport(provider, {
@@ -113,8 +143,10 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
       me: report.me,
       stats: chat.stats,
       summaries,
-      kind: report.kind === 'member' ? 'member' : 'group',
+      kind: followup ? 'followup' : report.kind === 'member' ? 'member' : 'group',
       subject: report.subject ?? undefined,
+      question,
+      retrieved,
     })
   } catch (err) {
     return recordFailure(db, reportId, err, { progress: summarized, total, pending: false })

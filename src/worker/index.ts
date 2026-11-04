@@ -4,6 +4,7 @@ import { advanceReport } from './jobs'
 import { createDb, randomId, type ReportRow } from './db'
 import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
+import { cleanOneLine } from '../pipeline/safety'
 
 export interface Env {
   DB: D1Database
@@ -28,6 +29,8 @@ const HEX32 = /^[0-9a-f]{32}$/
 /** Letters, combining marks, spaces, brackets and hyphens, 2 to 40 characters. Linear. */
 const LANGUAGE = /^[\p{L}\p{M} ()-]{2,40}$/u
 const PERSONAS = new Set(['brandon', 'clara', 'diego'])
+/** A follow-up question: 1 to 500 characters after cleaning. */
+const QUESTION_MAX = 500
 
 const isId = (s: string) => HEX32.test(s)
 const notFound = () => new ApiError(404, 'not_found')
@@ -74,20 +77,26 @@ function parseJson(bytes: Uint8Array): unknown {
 function validateReportRequest(input: unknown, participants: string[]) {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new ApiError(400, 'bad_request')
   const body = input as Record<string, unknown>
-  if (body.kind === 'followup') throw new ApiError(400, 'unsupported_kind')
-  if (body.kind !== 'group' && body.kind !== 'member') throw new ApiError(400, 'bad_request')
-  const kind: 'group' | 'member' = body.kind
+  if (body.kind !== 'group' && body.kind !== 'member' && body.kind !== 'followup') throw new ApiError(400, 'bad_request')
+  const kind: 'group' | 'member' | 'followup' = body.kind
   if (typeof body.persona !== 'string' || !PERSONAS.has(body.persona)) throw new ApiError(400, 'bad_request')
   const language = typeof body.language === 'string' ? body.language.trim() : ''
   if (!LANGUAGE.test(language)) throw new ApiError(400, 'bad_request')
   const known = new Set(participants)
   if (typeof body.me !== 'string' || !known.has(body.me)) throw new ApiError(400, 'bad_request')
   let subject: string | null = null
+  let question: string | null = null
   if (kind === 'member') {
     if (typeof body.subject !== 'string' || !known.has(body.subject)) throw new ApiError(400, 'bad_request')
     subject = body.subject
   }
-  return { persona: body.persona as 'brandon' | 'clara' | 'diego', language, me: body.me, kind, subject }
+  if (kind === 'followup') {
+    // Line breaks, tabs and control characters collapse to single spaces. The stored text is the cleaned one.
+    const cleaned = typeof body.question === 'string' ? cleanOneLine(body.question, Infinity) : ''
+    if (cleaned.length < 1 || cleaned.length > QUESTION_MAX) throw new ApiError(400, 'bad_request')
+    question = cleaned
+  }
+  return { persona: body.persona as 'brandon' | 'clara' | 'diego', language, me: body.me, kind, subject, question }
 }
 
 const reportView = (r: ReportRow) => ({
@@ -98,6 +107,7 @@ const reportView = (r: ReportRow) => ({
   language: r.language,
   kind: r.kind,
   subject: r.subject,
+  question: r.question,
   error: r.error,
   ...(r.status === 'done' ? { content: r.content } : {}),
 })
@@ -162,7 +172,16 @@ export function createApp(deps: AppDeps = {}) {
     if (!chat) throw notFound()
     const req = validateReportRequest(parseJson(await readBounded(c.req.raw, SMALL_JSON_BYTES)), chat.participants)
     const chunks = await db.getChunks(chatId)
-    const reportId = await db.createReport({ chatId, ...req, subject: req.subject ?? undefined, total: chunks.length + 1 })
+    const reportId = await db.createReport({
+      chatId,
+      persona: req.persona,
+      language: req.language,
+      me: req.me,
+      kind: req.kind,
+      subject: req.subject ?? undefined,
+      question: req.question ?? undefined,
+      total: chunks.length + 1,
+    })
     return c.json({ reportId }, 201)
   })
 

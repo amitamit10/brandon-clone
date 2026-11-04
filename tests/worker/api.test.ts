@@ -216,7 +216,7 @@ describe('POST /api/chats/:id/reports', () => {
     expect(res.status).toBe(404)
   })
 
-  it('validates persona, language, me and subject; followup returns unsupported_kind', async () => {
+  it('validates persona, language, me and subject', async () => {
     const app = createApp({ provider: fakeProvider() })
     const chat = await uploadChat(app, uploadBody(chatWith(40)))
     const base = { persona: 'brandon', language: 'English', me: 'Ana', kind: 'group' }
@@ -232,10 +232,6 @@ describe('POST /api/chats/:id/reports', () => {
       const res = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, { json: b })
       expect(res.status, JSON.stringify(b)).toBe(400)
     }
-
-    const followup = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, { json: { ...base, kind: 'followup', question: 'why?' } })
-    expect(followup.status).toBe(400)
-    expect(await followup.json()).toEqual({ error: 'unsupported_kind' })
 
     const hebrew = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, { json: { ...base, language: 'עברית' } })
     expect(hebrew.status).toBe(201)
@@ -253,6 +249,55 @@ describe('POST /api/chats/:id/reports', () => {
     expect(res.status).toBe(429)
     expect(await res.json()).toEqual({ error: 'rate_limited' })
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0)
+  })
+})
+
+describe('POST /api/chats/:id/reports for followups', () => {
+  const base = { persona: 'brandon', language: 'English', me: 'Ana', kind: 'followup' }
+
+  it('requires a question of 1 to 500 characters after trimming; anything else is 400 bad_request', async () => {
+    const app = createApp({ provider: fakeProvider() })
+    const chat = await uploadChat(app, uploadBody(chatWith(40)))
+    const bad: Record<string, unknown>[] = [
+      { ...base },
+      { ...base, question: '' },
+      { ...base, question: '   \n\t  ' },
+      { ...base, question: 42 },
+      { ...base, question: 'q'.repeat(501) },
+      { ...base, question: `  ${'q'.repeat(501)}  ` }, // 501 after trimming
+      { ...base, persona: 'nobody', question: 'why?' },
+      { ...base, language: 'E', question: 'why?' },
+      { ...base, me: 'Stranger', question: 'why?' },
+    ]
+    for (const b of bad) {
+      const res = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, { json: b })
+      expect(res.status, JSON.stringify(b).slice(0, 120)).toBe(400)
+      expect(await res.json()).toEqual({ error: 'bad_request' })
+    }
+  })
+
+  it('accepts a valid question with 201 and {reportId}, and stores the cleaned question', async () => {
+    const app = createApp({ provider: fakeProvider() })
+    const chat = await uploadChat(app, uploadBody(chatWith(40)))
+    const res = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, {
+      json: { ...base, subject: 'Stranger', question: '  Who\tstarts\n\nthe  chats?\u0007  ' },
+    })
+    expect(res.status).toBe(201)
+    const { reportId } = (await res.json()) as { reportId: string }
+    expect(reportId).toMatch(HEX32)
+    const stored = await createDb(ENV.DB).getReport(reportId)
+    expect(stored).toMatchObject({ kind: 'followup', question: 'Who starts the chats?', subject: null })
+    expect((await getReport(app, reportId)).kind).toBe('followup')
+
+    const max = await send(app, 'POST', `/api/chats/${chat.chatId}/reports`, { json: { ...base, question: 'q'.repeat(500) } })
+    expect(max.status).toBe(201)
+  })
+
+  it('a followup for a missing or expired chat is 404', async () => {
+    const app = createApp({ provider: fakeProvider() })
+    const missing = await send(app, 'POST', `/api/chats/${'a'.repeat(32)}/reports`, { json: { ...base, question: 'why?' } })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ error: 'not_found' })
   })
 })
 
@@ -365,6 +410,91 @@ describe('advance', () => {
     const res = await send(app, 'POST', `/api/reports/${reportId}/advance`)
     expect(res.status).toBe(503)
     expect(await res.json()).toEqual({ error: 'llm_not_configured' })
+  })
+})
+
+describe('followup advance', () => {
+  /** A 40-message chat where message 25 is the only one about pineapple. */
+  function chatWithPineapple() {
+    const chat = chatWith(40)
+    chat.messages[25] = { ...chat.messages[25], text: 'the pineapple pizza debate went on all night' }
+    return chat
+  }
+
+  /** A followup answer: a direct verdict and one section. Followups carry no member profiles. */
+  const FOLLOWUP_REPLY = JSON.stringify({
+    title: '',
+    intro: '',
+    verdict: 'Probably Ana.',
+    dynamic: '',
+    shiftWeekNote: '',
+    runningJokes: [],
+    sections: [{ emoji: '💬', heading: 'Answer', body: 'It was said.\n\n> hello there\n\n> an invented line nobody wrote' }],
+    advice: '',
+  })
+  /** Summaries and group reports as usual; a followup prompt gets FOLLOWUP_REPLY. */
+  const scripted = () =>
+    fakeProvider((req) => (isSummaryCall(req) ? defaultReply(req) : req.prompt.includes('follow-up question') ? FOLLOWUP_REPLY : reportJson()))
+
+  it('reuses stored summaries from an earlier group report: exactly one provider call', async () => {
+    const provider = scripted()
+    const app = createApp({ provider })
+    const chat = chatWithPineapple()
+    const up = await uploadChat(app, uploadBody(chat, 400))
+    const group = await createReport(app, up.chatId)
+    await advanceUntilDone(app, group)
+    const before = provider.calls.length
+
+    const followup = await createReport(app, up.chatId, { kind: 'followup', question: 'Who won the pineapple debate?' })
+    expect(await advance(app, followup)).toMatchObject({ status: 'done', phase: 'done' })
+    expect(provider.calls).toHaveLength(before + 1)
+    expect(isSummaryCall(provider.calls[before])).toBe(false)
+  })
+
+  it('the followup prompt holds retrieved lines from the matching chunk; the question appears only inside REQUEST DATA', async () => {
+    const provider = scripted()
+    const app = createApp({ provider })
+    const chat = chatWithPineapple()
+    const up = await uploadChat(app, uploadBody(chat, 400))
+    const group = await createReport(app, up.chatId)
+    await advanceUntilDone(app, group)
+
+    const question = 'Who won the pineapple debate?'
+    const followup = await createReport(app, up.chatId, { kind: 'followup', question })
+    await advance(app, followup)
+    const prompt = provider.calls[provider.calls.length - 1].prompt
+
+    expect(prompt).toContain('the pineapple pizza debate went on all night')
+    expect(prompt.split(question)).toHaveLength(2) // exactly one occurrence
+    const dataStart = prompt.indexOf('REQUEST DATA')
+    const fenceEnd = prompt.indexOf('</untrusted_chat_data>', dataStart)
+    expect(prompt.indexOf(question)).toBeGreaterThan(dataStart)
+    expect(prompt.indexOf(question)).toBeLessThan(fenceEnd)
+  })
+
+  it('an invented quote in a followup answer is dropped; a real one stays', async () => {
+    const provider = scripted()
+    const app = createApp({ provider })
+    const up = await uploadChat(app, uploadBody(chatWith(40), 400))
+    const group = await createReport(app, up.chatId)
+    await advanceUntilDone(app, group)
+
+    const followup = await createReport(app, up.chatId, { kind: 'followup', question: 'who said hello?' })
+    expect(await advance(app, followup)).toMatchObject({ status: 'done' })
+    const report = await getReport(app, followup)
+    expect(report).toMatchObject({ kind: 'followup', status: 'done' })
+    const body = report.content?.sections[0].body ?? ''
+    expect(body).toContain('> hello there')
+    expect(body).not.toContain('invented')
+  })
+
+  it('GET returns the question for a done followup', async () => {
+    const app = createApp({ provider: scripted() })
+    const up = await uploadChat(app, uploadBody(chatWith(40), 400))
+    const followup = await createReport(app, up.chatId, { kind: 'followup', question: '  Who   talks most? ' })
+    await advanceUntilDone(app, followup)
+    const res = await send(app, 'GET', `/api/reports/${followup}`)
+    expect(await res.json()).toMatchObject({ status: 'done', kind: 'followup', question: 'Who talks most?' })
   })
 })
 
