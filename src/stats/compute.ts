@@ -1,22 +1,11 @@
 import { ParseError, type ChatStats, type MemberStats, type Message, type ParsedChat } from '../shared/types'
+import { emojiGraphemes } from './emoji'
 
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
 const REPLY_WINDOW_MS = 6 * HOUR
 const DEFAULT_CONVERSATION_GAP_MS = 6 * HOUR
 const TOP_EMOJIS = 5
-
-const graphemes = new Intl.Segmenter('und', { granularity: 'grapheme' })
-const PICTO = /\p{Extended_Pictographic}/u
-
-/** Emoji graphemes in a string (multi-codepoint emoji count once). */
-function emojiGraphemes(text: string): string[] {
-  const out: string[] = []
-  for (const { segment } of graphemes.segment(text)) {
-    if (PICTO.test(segment)) out.push(segment)
-  }
-  return out
-}
 
 /** ISO date (YYYY-MM-DD) of the UTC calendar day of ts. */
 const isoDay = (ts: number) => new Date(ts).toISOString().slice(0, 10)

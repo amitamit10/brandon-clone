@@ -48,6 +48,24 @@ export interface ChatStats {
   shiftWeek: { weekStart: string; ratio: number } | null
 }
 
+/** Story-card facts computed in the browser (see src/stats/extras.ts). */
+export interface ChatExtras {
+  /** per UTC day with at least one message, sorted by date */
+  calendar: { date: string; count: number }[]
+  /** longest run of consecutive days that each have a message; empty strings when there are none */
+  streak: { days: number; fromDate: string; toDate: string }
+  /** top 3 senders by message count, each with their longest text message by words */
+  longestMessages: { sender: string; words: number; ts: number; text: string }[]
+  firstMessages: { sender: string; text: string; ts: number }[]
+  lastMessages: { sender: string; text: string; ts: number }[]
+  /** laugh tokens per sender (senders with none are absent); prototype-free */
+  laughs: Record<string, number>
+  /** the longest single laugh token and its sender; length 0 and sender '' when none */
+  laughRecord: { sender: string; length: number }
+  topWords: [string, number][]
+  topEmojis: [string, number][]
+}
+
 export type PersonaId = 'brandon' | 'clara' | 'diego'
 
 /** A slice of the chat sent to the model in one call. fromId/toId are message ids (inclusive). */

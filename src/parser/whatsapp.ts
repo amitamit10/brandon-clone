@@ -12,6 +12,12 @@ const MEDIA = /^<?(media|image|video|audio|sticker|gif|document|contact card|voi
 const DELETED = /^(This message was deleted|You deleted this message)\.?$/
 const EDITED_SUFFIX = '<This message was edited>'
 
+/** Message kind from its body (the text after the sender, edited suffix already removed). Shared with reconstruct.ts. */
+export function classifyBody(body: string): Message['kind'] {
+  const trimmed = body.trim()
+  return DELETED.test(trimmed) ? 'deleted' : MEDIA.test(trimmed) ? 'media' : 'text'
+}
+
 interface Header {
   a: number
   b: number
@@ -88,7 +94,7 @@ export function parseExport(text: string): ParsedChat {
     const edited = body.endsWith(EDITED_SUFFIX)
     if (edited) body = body.slice(0, -EDITED_SUFFIX.length)
     const trimmed = body.trim()
-    const kind: Message['kind'] = DELETED.test(trimmed) ? 'deleted' : MEDIA.test(trimmed) ? 'media' : 'text'
+    const kind = classifyBody(trimmed)
     if (!participants.includes(e.sender)) participants.push(e.sender)
     messages.push({ id: messages.length, ts: e.ts, sender: e.sender, text: trimmed, kind, edited })
   }

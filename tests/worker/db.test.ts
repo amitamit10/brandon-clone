@@ -1,20 +1,16 @@
 import { env } from 'cloudflare:test'
 import { beforeAll, describe, expect, it } from 'vitest'
-import schema from '../../migrations/0001_init.sql?raw'
 import { createDb, randomId } from '../../src/worker/db'
 import type { Env } from '../../src/worker/index'
 import type { Chunk, ChunkSummary, GroupReport } from '../../src/shared/types'
 import { statsChat } from '../fixtures/stats-chat'
 import { computeStats } from '../../src/stats/compute'
+import { applyMigrations } from './support'
 
 const DB = (env as unknown as Env).DB
 
 beforeAll(async () => {
-  const statements = schema
-    .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
-  await DB.batch(statements.map((s) => DB.prepare(s)))
+  await applyMigrations(DB)
 })
 
 const chunks = (n: number): Chunk[] =>
