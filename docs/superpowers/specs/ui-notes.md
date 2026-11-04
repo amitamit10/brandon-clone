@@ -28,3 +28,19 @@ The real site counted **14,038** messages in the sample, and its per-sender coun
 - A **required group name**.
 - A **group-chat export tutorial** modal (our own illustrations/copy).
 - Skip: email login, free preview/paywall, other chat apps.
+
+## Motion spec (read from the live site's CSS; recreate with our own code and artwork)
+Policy: we copy techniques and timings, not their image assets (mascot, avatars, testimonial photos, screenshot wall) or brand marks. Use our own mascot and generic icons.
+
+| Where | Technique | Values |
+|---|---|---|
+| Hero avatar cluster | entrance | `cluster-arrive` 0.7s, `cubic-bezier(0.16, 1, 0.3, 1)` (fast out, soft landing) |
+| Avatars in the cluster | pop-in with overshoot | `look-in` 0.42s, `cubic-bezier(0.34, 1.56, 0.64, 1)`, one per avatar (7), staggered |
+| Behind the cluster | rippling rings | `circle-ripple` 7s ease, infinite, 7 rings with negative delays about 0.12 s apart |
+| Chat pill rows | three marquee rows | `drift-left` 54 s, `drift-right` 66 s (delay -9 s), `drift-left` 60 s (delay -18 s); all linear, infinite; the shift is a CSS variable (`--marquee-shift`) |
+| Demo area mascot | pulsing halo | `halo` 2.4 s loop; demo content `fade-in` 0.6 s ease |
+| Buttons | enter | `cta-enter`: opacity 0→1 and translateY 0.5rem→0 |
+| Inputs / errors | feedback | `ink-shake` (±8 px, 5 steps) for invalid; `ink-hop` (−6 px at 30%) for small celebrations |
+| Loaders | `spin` (360°), `pulse` (opacity 0.5) | standard |
+| Wizard steps / modals | Tailwind-style `enter` utility | fade plus small slide/scale |
+Also: honour `prefers-reduced-motion` (stop the marquees and ripples).
