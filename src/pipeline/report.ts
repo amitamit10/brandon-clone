@@ -1,6 +1,6 @@
 import { generateJson, type LlmProvider, type LlmRequest } from '../llm/provider'
 import { PERSONAS } from './personas'
-import { computeStats } from '../stats/compute'
+import { cleanOneLine, fence, safeLanguage, sanitizeModelText } from './safety'
 import type { ChatStats, ChunkSummary, GroupReport, ParsedChat, PersonaId } from '../shared/types'
 
 export type ReportKind = 'group' | 'member' | 'followup'
@@ -28,6 +28,10 @@ const MAX_MEMBERS = 60
 const MAX_JOKES = 20
 const MAX_BODY_CHARS = 8_000
 const MAX_SHORT_CHARS = 2_000
+const PROMPT_MEMBERS = 15
+const MAX_NAME_CHARS = 40
+const MAX_ASK_CHARS = 500
+const MIN_QUOTE_CHARS = 4
 
 const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
@@ -42,7 +46,8 @@ const str = (x: unknown, max = MAX_SHORT_CHARS): string => {
   if (typeof x !== 'string') throw new Error('expected a string')
   return x.slice(0, max)
 }
-const optStr = (x: unknown, max = MAX_SHORT_CHARS): string => (typeof x === 'string' ? x.slice(0, max) : '')
+/** Absent (undefined) becomes ''. A present value must be a string. */
+const optStr = (x: unknown, max = MAX_SHORT_CHARS): string => (x === undefined ? '' : str(x, max))
 const list = (x: unknown, max: number): unknown[] => {
   if (!Array.isArray(x)) throw new Error('expected an array')
   return x.slice(0, max)
@@ -57,10 +62,13 @@ function statsBlock(stats: ChatStats): string {
   const lines = [
     `Chat: ${stats.total} messages from ${isoDay(stats.firstTs)} to ${isoDay(stats.lastTs)} (${stats.days} days).`,
     'Per member:',
-    ...Object.entries(stats.perMember).map(
+    ...Object.entries(stats.perMember)
+      .sort((x, y) => y[1].messages - x[1].messages)
+      .slice(0, PROMPT_MEMBERS)
+      .map(
       ([name, m]) =>
-        `- ${name}: ${m.messages} messages (${pct(m.messages, stats.total)}%), ${m.starters} conversation starters, ` +
-        `${m.words} words, ${m.media} media, busiest hour ${String(m.busiestHour).padStart(2, '0')}:00 UTC`,
+        `- ${cleanOneLine(name, MAX_NAME_CHARS)}: ${m.messages} messages (${pct(m.messages, stats.total)}%), ${m.starters} conversation starters, ` +
+        `${m.words} words, ${m.media} media, busiest hour ${String(m.busiestHour).padStart(2, '0')}:00`,
     ),
     `busiest day: ${stats.busiestDay.date} (${stats.busiestDay.count} messages)`,
     `longest silence: ${isoDay(stats.longestSilence.fromTs)} ${hhmm(stats.longestSilence.fromTs)} to ${isoDay(stats.longestSilence.toTs)} ${hhmm(stats.longestSilence.toTs)}`,
@@ -92,13 +100,13 @@ function summariesBlock(summaries: ChunkSummary[]): string {
 }
 
 function requestBlock(a: ReportInput): string {
-  if (a.kind === 'member') return `Write the deep profile of ${a.subject ?? ''} in members (and sections). Other members may be left out.`
+  if (a.kind === 'member') return `Write the deep profile of ${cleanOneLine(a.subject ?? '', 80)} in members (and sections). Other members may be left out.`
   if (a.kind === 'followup') {
     return [
-      `Answer this follow-up question about the chat: ${a.question ?? ''}`,
+      `Answer this follow-up question about the chat: ${cleanOneLine(a.question ?? '', MAX_ASK_CHARS)}`,
       'Put the answer in sections, and a direct one-line answer in verdict. Other fields may be empty.',
       'Retrieved lines from the chat:',
-      (a.retrieved ?? []).join('\n').slice(0, MAX_RETRIEVED_CHARS),
+      fence((a.retrieved ?? []).join('\n').slice(0, MAX_RETRIEVED_CHARS)),
     ].join('\n')
   }
   return 'Write the full group report with a profile for every member.'
@@ -106,12 +114,12 @@ function requestBlock(a: ReportInput): string {
 
 function buildPrompt(a: ReportInput): string {
   return [
-    `Language: write everything in ${a.language}.`,
-    `The person who asked for this report is ${a.me}.`,
+    `Language: write everything in ${safeLanguage(a.language)}.`,
+    `The person who asked for this report is ${cleanOneLine(a.me, 80)}.`,
     'Exact stats (computed by code, use these numbers):',
     statsBlock(a.stats),
     'Summaries of the chat, in order:',
-    summariesBlock(a.summaries) || '(no summaries)',
+    fence(summariesBlock(a.summaries) || '(no summaries)'),
     requestBlock(a),
     `Reply with ONLY JSON matching this shape:\n${REPORT_SCHEMA}`,
   ].join('\n\n')
@@ -132,12 +140,13 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
   const membersRaw = x.members === undefined ? [] : list(x.members, MAX_MEMBERS)
   const members = membersRaw.map((m) => {
     if (!isObject(m)) throw new Error('member is not an object')
-    const quote = typeof m.quote === 'string' && m.quote.length > 0 ? m.quote.slice(0, MAX_SHORT_CHARS) : undefined
+    // A quote may be absent (undefined or null). If present it must be a string.
+    const quote = m.quote === undefined || m.quote === null ? undefined : str(m.quote)
     return {
       name: str(m.name),
-      nickname: optStr(m.nickname),
-      opinion: optStr(m.opinion, MAX_BODY_CHARS),
-      ...(quote !== undefined ? { quote } : {}),
+      nickname: str(m.nickname),
+      opinion: str(m.opinion, MAX_BODY_CHARS),
+      ...(quote ? { quote } : {}),
     }
   })
   if (a.kind === 'member' && !members.some((m) => m.name === a.subject)) {
@@ -145,7 +154,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
   }
   if (a.kind === 'group' && members.length === 0) throw new Error('group report has no member profiles')
 
-  const verdict = followup ? str(x.verdict) : optStr(x.verdict)
+  const verdict = followup ? optStr(x.verdict) : str(x.verdict)
   if (followup && verdict.length === 0) throw new Error('followup has no direct answer')
 
   const jokesRaw = x.runningJokes === undefined ? [] : list(x.runningJokes, MAX_JOKES)
@@ -155,7 +164,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     title: full ? str(x.title) : optStr(x.title),
     intro: full ? str(x.intro, MAX_BODY_CHARS) : optStr(x.intro, MAX_BODY_CHARS),
     verdict,
-    dynamic: optStr(x.dynamic, MAX_BODY_CHARS),
+    dynamic: full ? str(x.dynamic, MAX_BODY_CHARS) : optStr(x.dynamic, MAX_BODY_CHARS),
     shiftWeekNote: full ? str(x.shiftWeekNote, MAX_BODY_CHARS) : optStr(x.shiftWeekNote, MAX_BODY_CHARS),
     runningJokes: (jokesRaw as string[]).map((j) => j.slice(0, MAX_SHORT_CHARS)),
     sections,
@@ -167,7 +176,22 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
 /** One model call (plus at most one repair) that writes a report in the chosen persona. */
 export async function generateReport(p: LlmProvider, a: ReportInput): Promise<GroupReport> {
   const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a) }
-  return generateJson(p, req, (x) => toReport(x, a))
+  return sanitizeReport(await generateJson(p, req, (x) => toReport(x, a)))
+}
+
+function sanitizeReport(r: GroupReport): GroupReport {
+  const t = sanitizeModelText
+  return {
+    title: t(r.title),
+    intro: t(r.intro),
+    verdict: t(r.verdict),
+    dynamic: t(r.dynamic),
+    shiftWeekNote: t(r.shiftWeekNote),
+    runningJokes: r.runningJokes.map(t),
+    sections: r.sections.map((s) => ({ emoji: t(s.emoji), heading: t(s.heading), body: t(s.body) })),
+    members: r.members.map((m) => ({ ...m, name: m.name, nickname: t(m.nickname), opinion: t(m.opinion), ...(m.quote !== undefined ? { quote: t(m.quote) } : {}) })),
+    advice: t(r.advice),
+  }
 }
 
 /** Matching is case-, whitespace- and bidi-insensitive. */
@@ -185,30 +209,73 @@ function unwrap(s: string): string {
 }
 
 /**
- * Drops every quote that is not a substring of one message. Checks member quotes and
- * '> ' lines in section bodies. Returns a new report; the input is not changed.
+ * Drops every quote that is not a substring of one text message (media/deleted messages are ignored).
+ * Member quotes must come from that member's own messages; section '> ' quotes from any member.
+ * Quotes shorter than MIN_QUOTE_CHARS never count. Returns a new report; the input is not changed.
  */
 export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport {
-  // \u0001 separates messages, so a quote cannot match across two messages.
-  const haystack = chat.messages.map((m) => normalise(m.text)).join('\u0001')
-  const isQuote = (raw: string): boolean => {
-    const n = normalise(unwrap(raw.trim()))
-    return n.length > 0 && !n.includes('\u0001') && haystack.includes(n)
+  // \u0001 separates messages, so a quote cannot match across two messages. Sender names are
+  // untrusted, so the per-sender index is a Map.
+  const bySender = new Map<string, string[]>()
+  const all: string[] = []
+  for (const m of chat.messages) {
+    if (m.kind !== 'text') continue
+    const n = normalise(m.text)
+    all.push(n)
+    const list = bySender.get(m.sender)
+    if (list) list.push(n)
+    else bySender.set(m.sender, [n])
+  }
+  const hayAll = all.join('\u0001')
+  const haySender = new Map<string, string>()
+  for (const [k, v] of bySender) haySender.set(k, v.join('\u0001'))
+
+  const verified = (raw: string, sender?: string): string | undefined => {
+    const clean = cleanOneLine(unwrap(raw.trim()), MAX_SHORT_CHARS)
+    const n = normalise(clean)
+    if (n.length < MIN_QUOTE_CHARS) return undefined
+    const hay = sender === undefined ? hayAll : haySender.get(sender)
+    return hay !== undefined && hay.includes(n) ? clean : undefined
+  }
+
+  const cleanBody = (body: string): string => {
+    const out: string[] = []
+    let needBlank = false
+    for (const line of body.split('\n')) {
+      if (isQuoteLine(line)) {
+        const q = verified(stripQuoteMarks(line))
+        if (q !== undefined) {
+          out.push(`> ${q}`)
+          needBlank = true
+        }
+        continue
+      }
+      if (needBlank && line.trim() !== '') out.push('')
+      needBlank = false
+      out.push(line)
+    }
+    return out.join('\n')
   }
 
   return {
     ...report,
-    sections: report.sections.map((s) => ({
-      emoji: s.emoji,
-      heading: s.heading,
-      body: s.body
-        .split('\n')
-        .filter((line) => !line.startsWith('> ') || isQuote(line.slice(2)))
-        .join('\n'),
-    })),
+    sections: report.sections.map((s) => ({ emoji: s.emoji, heading: s.heading, body: cleanBody(s.body) })),
     members: report.members.map((m) => {
-      const keep = m.quote !== undefined && isQuote(m.quote)
-      return { name: m.name, nickname: m.nickname, opinion: m.opinion, ...(keep ? { quote: m.quote } : {}) }
+      const q = m.quote !== undefined ? verified(m.quote, m.name) : undefined
+      return { name: m.name, nickname: m.nickname, opinion: m.opinion, ...(q !== undefined ? { quote: q } : {}) }
     }),
   }
+}
+
+/** A markdown blockquote line: up to 3 spaces of indent, then '>'. */
+function isQuoteLine(line: string): boolean {
+  let i = 0
+  while (i < line.length && i < 3 && line[i] === ' ') i++
+  return line[i] === '>'
+}
+
+function stripQuoteMarks(line: string): string {
+  let i = 0
+  while (i < line.length && (line[i] === '>' || line[i] === ' ')) i++
+  return line.slice(i)
 }

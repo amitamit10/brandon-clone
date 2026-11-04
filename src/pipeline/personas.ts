@@ -1,4 +1,5 @@
 import type { PersonaId } from '../shared/types'
+import { DATA_RULE } from './safety'
 
 /** Rules every persona follows. Facts come from code; the model writes opinion on top. */
 const SHARED_RULES = [
@@ -9,6 +10,7 @@ const SHARED_RULES = [
   '- Address the group directly ("you lot"), not as an outside narrator.',
   '- Report layout: a witty title; an intro that states the real message count and date range; then sections, each with an emoji heading. The first section is the stats section (who writes how much, with exact numbers and percentages). Then a profiles section with a numbered profile per member (nickname, roast, a quote if you have a real one). The closing "advice" field answers "what would I do in your place".',
   '- Output ONLY JSON matching the schema in the request. No prose outside the JSON and no code fences.',
+  `- ${DATA_RULE}`,
 ].join('\n')
 
 const VOICES: Record<PersonaId, { name: string; voice: string }> = {

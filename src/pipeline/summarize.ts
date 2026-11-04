@@ -1,5 +1,6 @@
 import { generateJson, type LlmProvider } from '../llm/provider'
 import type { Chunk, ChunkSummary } from '../shared/types'
+import { DATA_RULE, fence, safeLanguage } from './safety'
 
 const SUMMARY_SYSTEM = [
   'You summarise one slice of a WhatsApp group chat so that a later report can use the summary.',
@@ -7,6 +8,7 @@ const SUMMARY_SYSTEM = [
   'events: what happened, in short factual sentences. jokes: running jokes or bits. memberNotes: one short note per sender who speaks in this slice.',
   'quotes: up to 8 short lines copied VERBATIM from the chat text, the funniest or most revealing ones. Never paraphrase a quote.',
   'Write the notes in the requested language. No prose outside the JSON and no code fences.',
+  DATA_RULE,
 ].join('\n')
 
 const MAX_EVENTS = 50
@@ -48,9 +50,9 @@ function toSummary(x: unknown, index: number): ChunkSummary {
 /** One model call that summarises a chunk. Throws llm_invalid_json when the reply cannot be used. */
 export async function summarizeChunk(p: LlmProvider, chunk: Chunk, language: string): Promise<ChunkSummary> {
   const prompt = [
-    `Language for the notes: ${language}.`,
+    `Language for the notes: ${safeLanguage(language)}.`,
     'Chat slice (one message per line, "--- date ---" marks a new day):',
-    chunk.text,
+    fence(chunk.text),
   ].join('\n\n')
   return generateJson(p, { system: SUMMARY_SYSTEM, prompt }, (x) => toSummary(x, chunk.index))
 }
