@@ -91,20 +91,33 @@ interface ReportDbRow {
 
 const parse = <T>(s: string | null): T | null => (s === null ? null : (JSON.parse(s) as T))
 
-const toChat = (r: ChatDbRow): ChatRow => ({
-  id: r.id,
-  name: r.name,
-  participants: JSON.parse(r.participants_json) as string[],
-  stats: JSON.parse(r.stats_json) as ChatStats,
-  createdAt: r.created_at,
-  expiresAt: r.expires_at,
-})
-const toChunk = (r: ChunkDbRow): ChunkRow => ({
-  chatId: r.chat_id,
-  idx: r.idx,
-  text: r.text,
-  summary: parse<ChunkSummary>(r.summary_json),
-})
+/**
+ * Copies a sender-keyed record into a prototype-free one. JSON.parse gives plain objects,
+ * so a sender named "constructor" would otherwise read Object.prototype members.
+ */
+function nullProto<T>(src: Record<string, T>): Record<string, T> {
+  const out: Record<string, T> = Object.create(null)
+  for (const [key, value] of Object.entries(src)) out[key] = value
+  return out
+}
+
+const toChat = (r: ChatDbRow): ChatRow => {
+  const stats = JSON.parse(r.stats_json) as ChatStats
+  stats.perMember = nullProto(stats.perMember)
+  return {
+    id: r.id,
+    name: r.name,
+    participants: JSON.parse(r.participants_json) as string[],
+    stats,
+    createdAt: r.created_at,
+    expiresAt: r.expires_at,
+  }
+}
+const toChunk = (r: ChunkDbRow): ChunkRow => {
+  const summary = parse<ChunkSummary>(r.summary_json)
+  if (summary) summary.memberNotes = nullProto(summary.memberNotes)
+  return { chatId: r.chat_id, idx: r.idx, text: r.text, summary }
+}
 const toReport = (r: ReportDbRow): ReportRow => ({
   id: r.id,
   chatId: r.chat_id,
@@ -135,7 +148,8 @@ const REPORT_COLUMNS = new Map<string, string>([
   ['question', 'question'],
 ])
 
-export function createDb(d1: D1Database) {
+/** `now` is injectable for tests. Expired chats (and everything under them) read as not found. */
+export function createDb(d1: D1Database, now: () => number = Date.now) {
   /** Removes a chat with its chunks and reports, in one atomic batch. */
   const deleteChat = async (id: string): Promise<void> => {
     await d1.batch([
@@ -164,14 +178,17 @@ export function createDb(d1: D1Database) {
     },
 
     async getChat(id: string): Promise<ChatRow | null> {
-      const row = await d1.prepare('SELECT * FROM chats WHERE id = ?').bind(id).first<ChatDbRow>()
+      const row = await d1.prepare('SELECT * FROM chats WHERE id = ? AND expires_at > ?').bind(id, now()).first<ChatDbRow>()
       return row ? toChat(row) : null
     },
 
     async getChunks(chatId: string): Promise<ChunkRow[]> {
       const res = await d1
-        .prepare('SELECT chat_id, idx, text, summary_json FROM chat_chunks WHERE chat_id = ? ORDER BY idx')
-        .bind(chatId)
+        .prepare(
+          'SELECT k.chat_id, k.idx, k.text, k.summary_json FROM chat_chunks k JOIN chats c ON c.id = k.chat_id ' +
+            'WHERE k.chat_id = ? AND c.expires_at > ? ORDER BY k.idx',
+        )
+        .bind(chatId, now())
         .all<ChunkDbRow>()
       return res.results.map(toChunk)
     },
@@ -208,7 +225,10 @@ export function createDb(d1: D1Database) {
     },
 
     async getReport(id: string): Promise<ReportRow | null> {
-      const row = await d1.prepare('SELECT * FROM reports WHERE id = ?').bind(id).first<ReportDbRow>()
+      const row = await d1
+        .prepare('SELECT r.* FROM reports r JOIN chats c ON c.id = r.chat_id WHERE r.id = ? AND c.expires_at > ?')
+        .bind(id, now())
+        .first<ReportDbRow>()
       return row ? toReport(row) : null
     },
 
@@ -234,7 +254,10 @@ export function createDb(d1: D1Database) {
     },
 
     async getReportByShare(shareId: string): Promise<ReportRow | null> {
-      const row = await d1.prepare('SELECT * FROM reports WHERE share_id = ?').bind(shareId).first<ReportDbRow>()
+      const row = await d1
+        .prepare('SELECT r.* FROM reports r JOIN chats c ON c.id = r.chat_id WHERE r.share_id = ? AND c.expires_at > ?')
+        .bind(shareId, now())
+        .first<ReportDbRow>()
       return row ? toReport(row) : null
     },
 
@@ -244,13 +267,17 @@ export function createDb(d1: D1Database) {
       await d1.prepare('DELETE FROM reports WHERE id = ?').bind(id).run()
     },
 
-    /** Deletes chats whose expires_at is at or before now. Returns how many chats were removed. */
-    async deleteExpired(now: number): Promise<number> {
-      const res = await d1.prepare('SELECT id FROM chats WHERE expires_at <= ?').bind(now).all<{ id: string }>()
-      for (const { id } of res.results) {
-        await deleteChat(id)
-      }
-      return res.results.length
+    /**
+     * Physically deletes chats whose expires_at is at or before `at`, in one batch of three set-based
+     * statements (a fixed number of queries, whatever the backlog). Returns how many chats were removed.
+     */
+    async deleteExpired(at: number): Promise<number> {
+      const res = await d1.batch([
+        d1.prepare('DELETE FROM reports WHERE chat_id IN (SELECT id FROM chats WHERE expires_at <= ?)').bind(at),
+        d1.prepare('DELETE FROM chat_chunks WHERE chat_id IN (SELECT id FROM chats WHERE expires_at <= ?)').bind(at),
+        d1.prepare('DELETE FROM chats WHERE expires_at <= ?').bind(at),
+      ])
+      return res[2].meta.changes
     },
   }
 }

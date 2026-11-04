@@ -77,6 +77,27 @@ describe('createDb', () => {
     expect(BigInt('0x' + b) - BigInt('0x' + a)).not.toBe(1n)
   })
 
+  it('JSON round trip keeps sender-keyed records prototype-free', async () => {
+    const stats = computeStats(statsChat)
+    const perMember: typeof stats.perMember = Object.create(null)
+    for (const [name, m] of Object.entries(stats.perMember)) perMember[name] = m
+    perMember['__proto__'] = stats.perMember.Ana
+    const id = await db.insertChat({ ...newChat(), stats: { ...stats, perMember } })
+
+    const chat = await db.getChat(id)
+    expect(Object.getPrototypeOf(chat?.stats.perMember)).toBeNull()
+    expect(Object.keys(chat?.stats.perMember ?? {})).toContain('__proto__')
+    expect(chat?.stats.perMember.Ben.messages).toBe(stats.perMember.Ben.messages)
+    expect(chat?.stats.perMember['constructor']).toBeUndefined()
+
+    const noteRecord: Record<string, string> = Object.create(null)
+    noteRecord['constructor'] = 'x'
+    await db.saveSummary(id, 0, { index: 0, events: [], jokes: [], memberNotes: noteRecord, quotes: [] })
+    const summary = (await db.getChunks(id))[0].summary
+    expect(Object.getPrototypeOf(summary?.memberNotes)).toBeNull()
+    expect(summary?.memberNotes['constructor']).toBe('x')
+  })
+
   it('deleteChat removes chunks and reports and share lookup returns null', async () => {
     const chatId = await db.insertChat(newChat())
     const reportId = await db.createReport(newReport(chatId))
@@ -134,3 +155,50 @@ describe('createDb', () => {
     expect(await db.getReport(r2)).not.toBeNull()
   })
 })
+
+describe('retention is enforced on reads, not only by the cron', () => {
+  const T = 5_000_000_000_000 // fixed "expiry" instant
+  it('expired chats, chunks, reports and share links read as not found even before cleanup', async () => {
+    const clock = { now: T - 1000 }
+    const db = createDb(DB, () => clock.now)
+    const chatId = await db.insertChat(newChat({ expiresAt: T }))
+    const reportId = await db.createReport(newReport(chatId))
+    await db.setShare(reportId, 'sharetoken-expiry-test')
+    expect(await db.getChat(chatId)).not.toBeNull()
+    expect((await db.getChunks(chatId)).length).toBe(3)
+    expect(await db.getReport(reportId)).not.toBeNull()
+    expect(await db.getReportByShare('sharetoken-expiry-test')).not.toBeNull()
+
+    clock.now = T // expired exactly now
+    expect(await db.getChat(chatId)).toBeNull()
+    expect(await db.getChunks(chatId)).toEqual([])
+    expect(await db.getReport(reportId)).toBeNull()
+    expect(await db.getReportByShare('sharetoken-expiry-test')).toBeNull()
+    // physically still there until the cron runs
+    const left = await DB.prepare('SELECT COUNT(*) AS n FROM chats WHERE id = ?').bind(chatId).first<{ n: number }>()
+    expect(left?.n).toBe(1)
+  })
+
+  it('deleteExpired uses a fixed number of queries however many chats expired', async () => {
+    const now = 4_000_000_000_000
+    const db0 = createDb(DB)
+    for (let i = 0; i < 60; i++) {
+      const id = await db0.insertChat(newChat({ expiresAt: now - 1 - i, chunks: chunks(1) }))
+      await db0.createReport(newReport(id))
+    }
+    let prepares = 0
+    const counting = new Proxy(DB, {
+      get(target, prop) {
+        if (prop === 'prepare') return (q: string) => (prepares++, target.prepare(q))
+        const v = (target as unknown as Record<string | symbol, unknown>)[prop]
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v
+      },
+    })
+    const removed = await createDb(counting).deleteExpired(now)
+    expect(removed).toBeGreaterThanOrEqual(60)
+    expect(prepares).toBeLessThanOrEqual(3)
+    const rest = await DB.prepare('SELECT COUNT(*) AS n FROM chats WHERE expires_at <= ?').bind(now).first<{ n: number }>()
+    expect(rest?.n).toBe(0)
+  })
+})
+
