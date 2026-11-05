@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Mascot } from '../components/Mascot'
-import { deleteReport } from '../lib/api'
+import { deleteChat, deleteReport } from '../lib/api'
 import { readHistory, removeReport, type HistoryEntry } from '../lib/history'
 import { apiErrorMessage } from '../lib/messages'
 import { PERSONA_NAMES } from '../lib/personas'
@@ -11,15 +11,20 @@ export function History() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  /** The last report of a chat takes the chat with it, so the uploaded text is not left on the server. */
+  const isLastForChat = (entry: HistoryEntry) => entries.filter((e) => e.chatId === entry.chatId).length === 1
+
   /**
    * Deletes on the server first, then locally. A 404 means it is already gone on the server, so the
    * local entry is removed too. A network or server error keeps the entry and shows a message.
    */
   const remove = async (entry: HistoryEntry) => {
+    const wholeChat = isLastForChat(entry)
     setDeleting(entry.reportId)
     setErrors((prev) => omit(prev, entry.reportId))
     try {
-      await deleteReport(entry.reportId)
+      if (wholeChat) await deleteChat(entry.chatId)
+      else await deleteReport(entry.reportId)
     } catch (e) {
       if (!(typeof e === 'object' && e !== null && (e as { status?: unknown }).status === 404)) {
         setErrors((prev) => ({ ...prev, [entry.reportId]: apiErrorMessage(e) }))
@@ -73,9 +78,9 @@ export function History() {
                       className="btn btn-ghost btn-danger"
                       onClick={() => remove(entry)}
                       disabled={deleting === entry.reportId}
-                      aria-label={`Delete report on ${entry.name}`}
+                      aria-label={`${isLastForChat(entry) ? 'Delete chat' : 'Delete report'} on ${entry.name}`}
                     >
-                      {deleting === entry.reportId ? 'Deleting…' : 'Delete'}
+                      {deleting === entry.reportId ? 'Deleting…' : isLastForChat(entry) ? 'Delete chat' : 'Delete'}
                     </button>
                   </div>
                   {errors[entry.reportId] && (

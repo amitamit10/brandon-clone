@@ -59,19 +59,36 @@ describe('history page', () => {
     expect(screen.getByText('No chats yet on this device.')).toBeTruthy()
   })
 
-  it('deletes on the server first, then removes the entry locally', async () => {
+  it('deletes the whole chat when its last report is deleted, on the server first, then locally', async () => {
     const user = userEvent.setup()
     storeHistory([entry('rep-1', 1000)])
     const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }))
     vi.stubGlobal('fetch', fetchMock)
     renderAt('/history', <History />, '/history')
 
-    await user.click(screen.getByRole('button', { name: 'Delete report on The Boys' }))
+    await user.click(screen.getByRole('button', { name: 'Delete chat on The Boys' }))
     await waitFor(() => expect(screen.getByText('No chats yet on this device.')).toBeTruthy())
     const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
-    expect(call[0]).toBe('/api/reports/rep-1')
+    expect(call[0]).toBe('/api/chats/c1') // the last report of a chat deletes the chat (and its stored text)
     expect(call[1].method).toBe('DELETE')
     expect(readHistory()).toEqual([])
+  })
+
+  it('deletes only the report while the chat still has other reports on this device', async () => {
+    const user = userEvent.setup()
+    storeHistory([entry('rep-1', 2000), entry('rep-2', 1000)])
+    const fetchMock = vi.fn(async () => jsonResponse(200, { ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderAt('/history', <History />, '/history')
+
+    const buttons = screen.getAllByRole('button', { name: 'Delete report on The Boys' })
+    expect(buttons).toHaveLength(2)
+    await user.click(buttons[0])
+    await waitFor(() => expect(readHistory().map((e) => e.reportId)).toEqual(['rep-2']))
+    const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(call[0]).toBe('/api/reports/rep-1')
+    // now rep-2 is the last one for the chat, so its button says it deletes the chat
+    expect(screen.getByRole('button', { name: 'Delete chat on The Boys' })).toBeTruthy()
   })
 
   it('treats a 404 as already deleted and removes the entry', async () => {
@@ -80,7 +97,7 @@ describe('history page', () => {
     vi.stubGlobal('fetch', vi.fn(async () => notFound()))
     renderAt('/history', <History />, '/history')
 
-    await user.click(screen.getByRole('button', { name: 'Delete report on The Boys' }))
+    await user.click(screen.getByRole('button', { name: 'Delete chat on The Boys' }))
     await waitFor(() => expect(readHistory()).toEqual([]))
   })
 
@@ -95,7 +112,7 @@ describe('history page', () => {
     )
     renderAt('/history', <History />, '/history')
 
-    await user.click(screen.getByRole('button', { name: 'Delete report on The Boys' }))
+    await user.click(screen.getByRole('button', { name: 'Delete chat on The Boys' }))
     expect((await screen.findByRole('alert')).textContent).toContain("We couldn't reach the server")
     expect(readHistory()).toHaveLength(1)
   })
