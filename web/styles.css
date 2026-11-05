@@ -819,14 +819,17 @@ svg {
   gap: 8px;
 }
 
-.step-dots span {
+.step-dots button {
+  padding: 0;
+  border: 0;
+  cursor: pointer;
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: #d4d4d4;
 }
 
-.step-dots span[aria-current='step'] {
+.step-dots button[aria-current='step'] {
   background: var(--ink);
   width: 22px;
 }
@@ -1084,10 +1087,9 @@ svg {
   background: var(--surface-dark);
   color: #f4f4f5;
   padding: 20px 16px 16px;
-  max-width: 560px;
-  margin: 0 auto;
+  height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   overflow: hidden;
 }
@@ -1095,6 +1097,7 @@ svg {
 .reading-count {
   font-size: clamp(1.6rem, 7vw, 2.2rem);
   font-weight: 800;
+  text-align: center;
   letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
@@ -1110,6 +1113,8 @@ svg {
 }
 
 .reading-track {
+  width: min(100%, 340px);
+  margin-inline: auto;
   height: 6px;
   border-radius: 999px;
   background: #26262b;
@@ -1125,6 +1130,8 @@ svg {
 }
 
 .reading-stage {
+  width: min(100%, 380px);
+  margin-inline: auto;
   position: relative;
   min-height: 0;
   overflow: hidden;
@@ -1135,7 +1142,12 @@ svg {
 .reading-col {
   list-style: none;
   margin: 0;
-  padding: 12vh 0;
+  padding: 0;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
   display: grid;
   gap: 8px;
 }

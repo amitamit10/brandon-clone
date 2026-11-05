@@ -7,15 +7,15 @@ import type { ChatExtras, ChatStats } from '../../src/shared/types'
 
 const DAY_MS = 86_400_000
 
-export function formatDay(ts: number): string {
-  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
+export function formatDay(ts: number, lang: 'en' | 'he' = 'en'): string {
+  return new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(
     new Date(ts),
   )
 }
 
-export function formatIsoDay(iso: string): string {
+export function formatIsoDay(iso: string, lang: 'en' | 'he' = 'en'): string {
   const ts = Date.parse(`${iso}T00:00:00Z`)
-  return Number.isNaN(ts) ? iso : formatDay(ts)
+  return Number.isNaN(ts) ? iso : formatDay(ts, lang)
 }
 
 export function formatClock(ts: number): string {

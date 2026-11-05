@@ -8,6 +8,7 @@ export interface ReadingScreenProps {
   me: string
   /** 0 to 1: how much of the chat has been read so far */
   fraction: number
+  language?: string
 }
 
 const WINDOW = 14
@@ -17,7 +18,7 @@ const PREVIEW_CHARS = 140
  * The reading screen: a dark page with a counter, a gradient bar, a column of the chat's own bubbles
  * and a mascot riding a scan line that moves down with the counter. Shows message text as plain text.
  */
-export function ReadingScreen({ messages, participants, me, fraction }: ReadingScreenProps) {
+export function ReadingScreen({ messages, participants, me, fraction, language }: ReadingScreenProps) {
   const total = messages.length
   const f = Math.min(1, Math.max(0, fraction))
   const counted = Math.round(f * total)
@@ -33,7 +34,7 @@ export function ReadingScreen({ messages, participants, me, fraction }: ReadingS
     <main className="reading" aria-live="off">
       <p className="reading-count" role="status">
         <span className="reading-number">{counted.toLocaleString('en-US')}</span>
-        <span className="reading-of"> of {total.toLocaleString('en-US')} messages</span>
+        <span className="reading-of">{language === 'Hebrew' ? ` מתוך ${total.toLocaleString('he-IL')} הודעות` : ` of ${total.toLocaleString('en-US')} messages`}</span>
       </p>
       <div className="reading-track" aria-hidden="true">
         <span style={{ width: `${f * 100}%` }} />
@@ -55,7 +56,7 @@ export function ReadingScreen({ messages, participants, me, fraction }: ReadingS
             )
           })}
         </ol>
-        <div className="scan-line" style={{ top: `${f * 100}%` }} aria-hidden="true">
+        <div className="scan-line" style={{ top: '50%' }} aria-hidden="true">
           <div className="scan-mascot">
             <Mascot persona="brandon" size={56} />
           </div>

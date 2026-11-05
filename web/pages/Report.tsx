@@ -80,6 +80,7 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
         participants={session.chat.participants}
         me={session.me}
         fraction={readingFraction(job)}
+        language={language}
       />
     )
   }

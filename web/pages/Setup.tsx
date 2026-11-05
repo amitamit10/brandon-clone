@@ -20,7 +20,7 @@ const TOTAL_STEPS = 5
  */
 export function Setup() {
   const navigate = useNavigate()
-  const { t, lang } = useI18n()
+  const { t, lang, setLang } = useI18n()
   const [step, setStep] = useState(1)
   const [original, setOriginal] = useState<Analyzed | null>(null)
   const [fileName, setFileName] = useState('')
@@ -117,7 +117,7 @@ export function Setup() {
               persona={persona}
               onPersona={setPersona}
               language={language}
-              onLanguage={setLanguage}
+              onLanguage={(value) => { setLanguage(value); if (value === 'Hebrew' || value === 'English') setLang(value === 'Hebrew' ? 'he' : 'en') }}
             />
           )}
           {step === 5 && renamed && (

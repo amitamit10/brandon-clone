@@ -12,6 +12,8 @@ const TOP_WORDS = 5
 const TOP_EMOJIS = 5
 const EDGE_COUNT = 5
 const LAUGH_EMOJI = new Set(['😂', '🤣'])
+// Deliberately limited to recognizable terms; this is not a claim about who was addressed.
+const ADDRESS_TERMS = new Set(['אחי', 'אחשלי', 'אחותי', 'חבר', 'חברים', 'bro', 'sis', 'mate', 'buddy', 'dude', 'friend'])
 
 const ENGLISH_STOP = [
   'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'any', 'can', 'had', 'her', 'was', 'one', 'our', 'out',
@@ -136,11 +138,25 @@ export function computeExtras(chat: ParsedChat): ChatExtras {
   // most used words: letters only, >= 3 letters, not a stop word
   const wordCounts = new Map<string, number>()
   for (const m of texts) {
-    for (const w of m.text.toLowerCase().match(/\p{L}+/gu) ?? []) {
+    for (const w of m.text.replace(/https?:\/\/\S+|www\.\S+/gi, ' ').toLowerCase().match(/\p{L}+/gu) ?? []) {
       if (w.length < 3 || STOP_WORDS.has(w)) continue
       wordCounts.set(w, (wordCounts.get(w) ?? 0) + 1)
     }
   }
+
+  const addresses = new Map<string, Map<string, number>>()
+  for (const m of texts) {
+    for (const token of m.text.toLowerCase().match(/\p{L}+/gu) ?? []) {
+      if (!ADDRESS_TERMS.has(token)) continue
+      let counts = addresses.get(m.sender)
+      if (!counts) { counts = new Map(); addresses.set(m.sender, counts) }
+      counts.set(token, (counts.get(token) ?? 0) + 1)
+    }
+  }
+  const addressTerms = [...addresses].map(([sender, counts]) => {
+    const [term, count] = topEntries(counts, 1)[0]
+    return { sender, term, count }
+  })
 
   const emojiCounts = new Map<string, number>()
   for (const m of texts) {
@@ -155,6 +171,7 @@ export function computeExtras(chat: ParsedChat): ChatExtras {
     lastMessages,
     laughs,
     laughRecord,
+    addressTerms,
     topWords: topEntries(wordCounts, TOP_WORDS),
     topEmojis: topEntries(emojiCounts, TOP_EMOJIS),
   }

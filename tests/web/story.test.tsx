@@ -1,3 +1,4 @@
+import { I18nProvider } from '../../web/lib/i18n'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -62,6 +63,11 @@ const extras: ChatExtras = {
 }
 
 describe('story cards', () => {
+  it('uses the last displayed message date rather than an unrelated maximum timestamp', () => {
+    render(<StoryCard index={6} stats={{ ...stats, lastTs: jan1 + 10 * DAY }} extras={extras} />)
+    expect(screen.getByText('Jan 4, 2025')).toBeTruthy()
+  })
+
   it('card 1 draws one square per day across the month rows', () => {
     // Jan 30 to Feb 2 2025: January (31 days) and February (28 days) rows.
     const grid = calendarGrid(extras, Date.parse('2025-01-30T00:00:00Z'), Date.parse('2025-02-02T00:00:00Z'))
@@ -105,7 +111,7 @@ describe('story cards', () => {
     expect(screen.getByText(/days in a row, Jan 1, 2025 to Jan 4, 2025/)).toBeTruthy()
     expect(screen.getByText('messages on Jan 2, 2025')).toBeTruthy()
     expect(screen.getByText('2 days')).toBeTruthy()
-    expect(screen.getByText('2% after 10pm · peak at 19:00')).toBeTruthy()
+    expect(screen.getByText('2% from 10pm to midnight · peak at 19:00')).toBeTruthy()
     expect(document.querySelectorAll('.hour-bar')).toHaveLength(24)
   })
 
@@ -144,5 +150,15 @@ describe('story cards', () => {
   it('card 7 says so when nobody laughed', () => {
     render(<StoryCard index={7} stats={stats} extras={{ ...extras, laughs: Object.create(null), laughRecord: { sender: '', length: 0 } }} />)
     expect(screen.getByText('No laughs counted.')).toBeTruthy()
+  })
+})
+
+describe('Hebrew rhythm', () => {
+  it('counts Saturdays with no messages inside the conversation span', () => {
+    localStorage.setItem('brandon_lang', 'he')
+    // 2025-01-04 is a Saturday and is active; 2025-01-11 is quiet.
+    render(<I18nProvider><StoryCard index={3} stats={{ ...stats, lastTs: jan1 + 10 * DAY }} extras={extras} /></I18nProvider>)
+    expect(screen.getByText('1 מתוך 2 שבתות ללא הודעות')).toBeTruthy()
+    localStorage.clear()
   })
 })

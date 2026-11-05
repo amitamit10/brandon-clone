@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useI18n } from '../lib/i18n'
 import type { ChatExtras, ChatStats } from '../../src/shared/types'
 import { pastelFor } from '../lib/palette'
 import {
@@ -32,10 +33,13 @@ export interface StoryProps {
 
 /** Renders one story card (1 to 7). Every value comes from stats or extras; names are plain text. */
 export function StoryCard({ index, stats, extras }: StoryProps & { index: number }) {
-  const title = STORY_TITLES[index - 1] ?? STORY_TITLES[0]
+  const { lang } = useI18n()
+  const he = lang === 'he'
+  const titlesHe = ['השנים שלכם, יום אחרי יום', 'מי מדבר, מי פותח', 'הקצב שלכם', 'ההודעה הארוכה ביותר', 'הכול התחיל כאן', 'ובינתיים, זה נגמר כאן', 'המילים שלכם']
+  const title = he ? (titlesHe[index - 1] ?? titlesHe[0]) : (STORY_TITLES[index - 1] ?? STORY_TITLES[0])
   const body =
     index === 1 ? <YearsCard stats={stats} extras={extras} />
-    : index === 2 ? <VoiceCard stats={stats} />
+    : index === 2 ? <VoiceCard stats={stats} extras={extras} />
     : index === 3 ? <RhythmCard stats={stats} extras={extras} />
     : index === 4 ? <LongestCard extras={extras} />
     : index === 5 ? <EdgeCard kind="first" stats={stats} extras={extras} />
@@ -43,7 +47,7 @@ export function StoryCard({ index, stats, extras }: StoryProps & { index: number
     : <WordsCard extras={extras} />
   return (
     <section className="story-card" aria-labelledby={`story-title-${index}`}>
-      <p className="small muted story-kicker">Card {index} of {STORY_COUNT}</p>
+      <p className="small muted story-kicker">{he ? `כרטיס ${index} מתוך ${STORY_COUNT}` : `Card ${index} of ${STORY_COUNT}`}</p>
       <h2 id={`story-title-${index}`} className="story-title">
         {title}
       </h2>
@@ -62,8 +66,9 @@ function colourIndexOf(stats: ChatStats, name: string): number {
 const HEAT_OPACITY = [0.08, 0.3, 0.5, 0.75, 1] as const
 
 function YearsCard({ stats, extras }: StoryProps) {
+  const { lang } = useI18n()
   const grid = calendarGrid(extras, stats.firstTs, stats.lastTs)
-  const summary = `${grid.activeDays} days with messages. Busiest day ${formatIsoDay(stats.busiestDay.date)} with ${stats.busiestDay.count} messages.`
+  const summary = lang === 'he' ? `${grid.activeDays} ימים עם הודעות. יום השיא: ${formatIsoDay(stats.busiestDay.date, lang)}, עם ${stats.busiestDay.count} הודעות.` : `${grid.activeDays} days with messages. Busiest day ${formatIsoDay(stats.busiestDay.date)} with ${stats.busiestDay.count} messages.`
   return (
     <div className="tile story-dark" style={{ background: '#0e0e10', color: '#fff' }}>
       <div className="heat" role="img" aria-label={summary}>
@@ -94,7 +99,8 @@ function YearsCard({ stats, extras }: StoryProps) {
 
 const DONUT_COLOURS = ['#d9ccff', '#ffc6dc', '#ffd2b8', '#bdf2de', '#ffeaa7', '#e6e6e6'] as const
 
-function VoiceCard({ stats }: { stats: ChatStats }) {
+function VoiceCard({ stats, extras }: StoryProps) {
+  const { lang } = useI18n()
   const voice = shareOfVoice(stats)
   const segments = donutSegments(voice)
   const starterRows = starters(stats)
@@ -102,7 +108,7 @@ function VoiceCard({ stats }: { stats: ChatStats }) {
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="tile tile-lilac">
-        <h3 className="story-sub">Share of voice</h3>
+        <h3 className="story-sub">{lang === 'he' ? 'נתח מהשיחה' : 'Share of voice'}</h3>
         <div className="voice">
           <svg viewBox="0 0 100 100" className="donut" role="img" aria-label="Share of messages by person">
             {segments.map((s) => (
@@ -121,7 +127,7 @@ function VoiceCard({ stats }: { stats: ChatStats }) {
         </div>
       </div>
       <div className="tile tile-pink">
-        <h3 className="story-sub">Who starts the conversation</h3>
+        <h3 className="story-sub">{lang === 'he' ? 'מי פותח את השיחה' : 'Who starts the conversation'}</h3>
         <ul className="bars">
           {starterRows.map((row) => (
             <li key={row.name}>
@@ -136,6 +142,11 @@ function VoiceCard({ stats }: { stats: ChatStats }) {
           ))}
         </ul>
       </div>
+      {(extras.addressTerms?.length ?? 0) > 0 && <div className="tile tile-mint">
+        <h3 className="story-sub">{lang === 'he' ? 'מילות פנייה נפוצות' : 'Common terms of address'}</h3>
+        <p className="small muted">{lang === 'he' ? 'מילים מזוהות שכל משתתף השתמש בהן' : 'Recognized terms used by each person'}</p>
+        <ul className="plain-list">{extras.addressTerms!.map((row) => <li key={row.sender}><span>{row.sender}: {row.term}</span><span>{row.count}</span></li>)}</ul>
+      </div>}
     </div>
   )
 }
@@ -143,38 +154,50 @@ function VoiceCard({ stats }: { stats: ChatStats }) {
 // ---- 3: rhythm ----
 
 function RhythmCard({ stats, extras }: StoryProps) {
+  const { lang } = useI18n()
   const r = rhythm(stats, extras)
   const maxHour = Math.max(1, ...r.hours)
+  // Count calendar Saturdays without iterating over a potentially very long date span.
+  const startDay = Math.floor(stats.firstTs / 86400000)
+  const endDay = Math.floor(stats.lastTs / 86400000)
+  const firstSaturday = startDay + (6 - new Date(startDay * 86400000).getUTCDay() + 7) % 7
+  const saturdays = firstSaturday > endDay ? 0 : Math.floor((endDay - firstSaturday) / 7) + 1
+  const activeSaturdays = extras.calendar.filter((d) => {
+    const day = Date.parse(`${d.date}T00:00:00Z`) / 86400000
+    return d.count > 0 && day >= startDay && day <= endDay && new Date(day * 86400000).getUTCDay() === 6
+  }).length
+  const quietSaturdays = Math.max(0, saturdays - activeSaturdays)
   return (
     <div className="stack" style={{ gap: 12 }}>
+      {lang === 'he' && saturdays > 0 && <div className="tile tile-lilac">{`${quietSaturdays} מתוך ${saturdays} שבתות ללא הודעות`}</div>}
       <div className="grid-2">
         <div className="tile tile-butter">
-          <span className="small muted">Record day</span>
+          <span className="small muted">{lang === 'he' ? 'יום השיא' : 'Record day'}</span>
           <strong className="story-big">{r.recordDay.count.toLocaleString('en-US')}</strong>
-          <span className="small">messages on {formatIsoDay(r.recordDay.date)}</span>
+          <span className="small">{lang === 'he' ? `הודעות בתאריך ${formatIsoDay(r.recordDay.date, lang)}` : `messages on ${formatIsoDay(r.recordDay.date)}`}</span>
         </div>
         <div className="tile tile-mint">
-          <span className="small muted">Streak</span>
+          <span className="small muted">{lang === 'he' ? 'רצף' : 'Streak'}</span>
           <strong className="story-big">{r.streakDays}</strong>
           <span className="small">
-            {r.streakDays === 1 ? 'day' : 'days'} in a row
-            {r.streakDays > 0 ? `, ${formatIsoDay(r.streakFrom)} to ${formatIsoDay(r.streakTo)}` : ''}
+            {lang === 'he' ? 'ימים ברצף' : `${r.streakDays === 1 ? 'day' : 'days'} in a row`}
+            {r.streakDays > 0 ? (lang === 'he' ? `, מ־${formatIsoDay(r.streakFrom, lang)} עד ${formatIsoDay(r.streakTo, lang)}` : `, ${formatIsoDay(r.streakFrom)} to ${formatIsoDay(r.streakTo)}`) : ''}
           </span>
         </div>
       </div>
       <div className="tile tile-peach">
-        <span className="small muted">Longest silence</span>
+        <span className="small muted">{lang === 'he' ? 'השתיקה הארוכה ביותר' : 'Longest silence'}</span>
         <strong className="story-big">
-          {r.silenceDays} {r.silenceDays === 1 ? 'day' : 'days'}
+          {r.silenceDays} {lang === 'he' ? 'ימים' : r.silenceDays === 1 ? 'day' : 'days'}
         </strong>
         <span className="small">
-          from {r.silenceFrom} to {r.silenceTo}
+          {lang === 'he' ? `מ־${formatDay(stats.longestSilence.fromTs, lang)} עד ${formatDay(stats.longestSilence.toTs, lang)}` : `from ${r.silenceFrom} to ${r.silenceTo}`}
         </span>
       </div>
       <div className="tile tile-lilac">
-        <h3 className="story-sub">By hour</h3>
+        <h3 className="story-sub">{lang === 'he' ? 'לפי שעה' : 'By hour'}</h3>
         <p className="small">
-          {r.lateNightPercent}% after 10pm · peak at {String(r.peakHour).padStart(2, '0')}:00
+          {lang === 'he' ? `${r.lateNightPercent}% בין 22:00 לחצות · שיא בשעה ${String(r.peakHour).padStart(2, '0')}:00` : `${r.lateNightPercent}% from 10pm to midnight · peak at ${String(r.peakHour).padStart(2, '0')}:00`}
         </p>
         <div className="hours" role="img" aria-label={`Messages per hour, peak at ${r.peakHour}:00`}>
           {r.hours.map((n, h) => (
@@ -196,7 +219,8 @@ function RhythmCard({ stats, extras }: StoryProps) {
 const PREVIEW_CHARS = 180
 
 function LongestCard({ extras }: { extras: ChatExtras }) {
-  if (extras.longestMessages.length === 0) return <p className="small muted">No text messages to show.</p>
+  const { lang } = useI18n()
+  if (extras.longestMessages.length === 0) return <p className="small muted">{lang === 'he' ? 'אין הודעות טקסט להצגה.' : 'No text messages to show.'}</p>
   return (
     <div className="stack" style={{ gap: 12 }}>
       {extras.longestMessages.map((m) => (
@@ -207,6 +231,7 @@ function LongestCard({ extras }: { extras: ChatExtras }) {
 }
 
 function LongMessage({ sender, words, ts, text }: { sender: string; words: number; ts: number; text: string }) {
+  const { lang } = useI18n()
   const [open, setOpen] = useState(false)
   const long = text.length > PREVIEW_CHARS
   const shown = open || !long ? text : `${text.slice(0, PREVIEW_CHARS)}…`
@@ -215,13 +240,13 @@ function LongMessage({ sender, words, ts, text }: { sender: string; words: numbe
       <header className="story-message-head">
         <strong>{sender}</strong>
         <span className="small">
-          {words.toLocaleString('en-US')} words · {formatDay(ts)}
+          {words.toLocaleString(lang === 'he' ? 'he-IL' : 'en-US')} {lang === 'he' ? 'מילים' : 'words'} · {formatDay(ts, lang)}
         </span>
       </header>
       <p className="bubble-text" dir="auto">{shown}</p>
       {long && (
         <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          {open ? 'See less' : 'See more'}
+          {open ? (lang === 'he' ? 'פחות' : 'See less') : (lang === 'he' ? 'עוד' : 'See more')}
         </button>
       )}
     </article>
@@ -231,13 +256,14 @@ function LongMessage({ sender, words, ts, text }: { sender: string; words: numbe
 // ---- 5 and 6: first and last messages ----
 
 function EdgeCard({ kind, stats, extras }: StoryProps & { kind: 'first' | 'last' }) {
+  const { lang } = useI18n()
   const items = kind === 'first' ? extras.firstMessages : extras.lastMessages
-  const ts = kind === 'first' ? stats.firstTs : stats.lastTs
+  const ts = kind === 'first' ? (items[0]?.ts ?? stats.firstTs) : (items.at(-1)?.ts ?? stats.lastTs)
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <p className="small muted">{formatDay(ts)}</p>
+      <p className="small muted">{formatDay(ts, lang)}</p>
       <div className="tile tile-lilac bubble-column">
-        {items.length === 0 && <p className="small muted">No text messages to show.</p>}
+        {items.length === 0 && <p className="small muted">{lang === 'he' ? 'אין הודעות טקסט להצגה.' : 'No text messages to show.'}</p>}
         {items.map((m, i) => (
           <div key={`${m.ts}-${i}`} className="bubble">
             <span className="bubble-sender" style={{ color: '#4a3a8a' }}>
@@ -255,14 +281,15 @@ function EdgeCard({ kind, stats, extras }: StoryProps & { kind: 'first' | 'last'
 // ---- 7: laughs, words, emojis ----
 
 function WordsCard({ extras }: { extras: ChatExtras }) {
+  const { lang } = useI18n()
   const laughs = laughRows(extras.laughs)
   const maxLaugh = Math.max(1, ...laughs.map((r) => r.count))
   return (
     <div className="stack" style={{ gap: 12 }}>
       <div className="tile tile-butter">
-        <h3 className="story-sub">Laugh print</h3>
+        <h3 className="story-sub">{lang === 'he' ? 'טביעת הצחוק' : 'Laugh print'}</h3>
         {laughs.length === 0 ? (
-          <p className="small muted">No laughs counted.</p>
+          <p className="small muted">{lang === 'he' ? 'לא זוהו ביטויי צחוק.' : 'No laughs counted.'}</p>
         ) : (
           <ul className="bars">
             {laughs.map((row) => (
@@ -280,13 +307,13 @@ function WordsCard({ extras }: { extras: ChatExtras }) {
         )}
         {extras.laughRecord.length > 0 && (
           <p className="small" style={{ marginTop: 8 }}>
-            Record: {extras.laughRecord.length} letters in one laugh, by {extras.laughRecord.sender}.
+            {lang === 'he' ? `שיא: ${extras.laughRecord.length} אותיות בצחוק אחד, מאת ${extras.laughRecord.sender}.` : `Record: ${extras.laughRecord.length} letters in one laugh, by ${extras.laughRecord.sender}.`}
           </p>
         )}
       </div>
       <div className="grid-2">
         <div className="tile tile-mint">
-          <h3 className="story-sub">Most used words</h3>
+          <h3 className="story-sub">{lang === 'he' ? 'המילים הנפוצות ביותר' : 'Most used words'}</h3>
           <ol className="plain-list">
             {extras.topWords.map(([word, n]) => (
               <li key={word}>
@@ -296,7 +323,7 @@ function WordsCard({ extras }: { extras: ChatExtras }) {
           </ol>
         </div>
         <div className="tile tile-peach">
-          <h3 className="story-sub">Most used emojis</h3>
+          <h3 className="story-sub">{lang === 'he' ? 'האימוג׳ים הנפוצים ביותר' : 'Most used emojis'}</h3>
           <ol className="plain-list emoji-list">
             {extras.topEmojis.map(([emoji, n]) => (
               <li key={emoji}>

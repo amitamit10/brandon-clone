@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Modal } from './Modal'
+import { useI18n } from '../lib/i18n'
 
 interface TutorialStep {
   title: string
@@ -74,39 +75,63 @@ const STEPS: TutorialStep[] = [
 ]
 
 export function TutorialModal({ onClose }: { onClose: () => void }) {
+  const he = useI18n().lang === 'he'
   const [index, setIndex] = useState(0)
+  const [playing, setPlaying] = useState(() => !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  useEffect(() => {
+    if (!playing || index >= STEPS.length - 1) return
+    const timer = window.setTimeout(() => setIndex((i) => Math.min(i + 1, STEPS.length - 1)), 4000)
+    return () => window.clearTimeout(timer)
+  }, [index, playing])
+  const heScreens = [
+    <><div className="phone-bar">תוכניות לסופ״ש</div><div className="phone-bubble">מי מגיע בשבת?</div><div className="phone-bubble phone-bubble--out">אני!</div></>,
+    <><div className="phone-bar phone-highlight">תוכניות לסופ״ש ›</div><div className="phone-bubble">פרטי הקבוצה</div></>,
+    <div className="phone-menu"><span>מדיה וקישורים</span><span>השתקת התראות</span><span className="is-on">ייצוא צ׳אט</span></div>,
+    <div className="phone-menu"><span className="is-on">ללא מדיה</span><span>כולל מדיה</span></div>,
+    <><div className="phone-bubble phone-bubble--out">נשמר: group chat.zip</div><div className="phone-bubble">מוכן להעלאה</div></>,
+    <><div className="phone-bar">Brandon Clone</div><div className="phone-bubble phone-highlight">לחצו להעלאה</div></>,
+  ]
   const step = STEPS[index]
   const last = index === STEPS.length - 1
+  const heSteps = [
+    ['פתיחת הקבוצה', 'פתחו את הקבוצה בוואטסאפ. כאן אפשר לנתח שיחות קבוצתיות.'],
+    ['פתיחת פרטי הקבוצה', 'לחצו על שם הקבוצה בראש המסך כדי לפתוח את הפרטים.'],
+    ['ייצוא השיחה', 'גללו בפרטי הקבוצה ובחרו באפשרות ייצוא הצ׳אט.'],
+    ['בחירה ללא מדיה', 'בחרו באפשרות ללא מדיה כדי לקבל קובץ קטן יותר.'],
+    ['שמירת הקובץ', 'שמרו את הקובץ בקבצים או בהורדות. אין צורך לחלץ אותו.'],
+    ['העלאה לאתר', 'חזרו לכאן, לחצו על אזור ההעלאה ובחרו את הקובץ.'],
+  ]
 
   return (
-    <Modal titleId="tutorial-title" title="Export a group chat without media" onClose={onClose}>
+    <Modal titleId="tutorial-title" title={he ? 'ייצוא שיחה קבוצתית ללא מדיה' : 'Export a group chat without media'} onClose={onClose}>
       <div className="stack" style={{ gap: 14 }}>
         <div className="phone" aria-hidden="true">
-          <div className="phone-screen">{step.screen}</div>
+          <div className="phone-screen">{he ? heScreens[index] : step.screen}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
           <p className="small muted">
-            Step {index + 1} of {STEPS.length}
+            {he ? `שלב ${index + 1} מתוך ${STEPS.length}` : `Step ${index + 1} of ${STEPS.length}`}
           </p>
-          <h3 style={{ fontSize: '1.15rem', marginTop: 4 }}>{step.title}</h3>
-          <p style={{ marginTop: 6 }}>{step.caption}</p>
+          <h3 style={{ fontSize: '1.15rem', marginTop: 4 }}>{he ? heSteps[index][0] : step.title}</h3>
+          <p style={{ marginTop: 6 }}>{he ? heSteps[index][1] : step.caption}</p>
         </div>
-        <div className="step-dots" aria-label="Tutorial progress">
+        <div className="step-dots" aria-label={he ? 'התקדמות ההדרכה' : 'Tutorial progress'}>
           {STEPS.map((s, i) => (
-            <span key={s.title} aria-current={i === index ? 'step' : undefined} />
+            <button key={s.title} type="button" aria-label={he ? `מעבר לשלב ${i + 1}` : `Go to step ${i + 1}`} aria-current={i === index ? 'step' : undefined} onClick={() => setIndex(i)} />
           ))}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <button type="button" className="btn btn-ghost" onClick={() => setIndex(index - 1)} disabled={index === 0}>
-            Previous
+            {he ? 'הקודם' : 'Previous'}
           </button>
+          <button type="button" className="btn btn-ghost" aria-label={playing ? (he ? 'השהיית ההדרכה' : 'Pause tutorial') : (he ? 'הפעלת ההדרכה' : 'Play tutorial')} onClick={() => setPlaying(!playing)}>{playing ? (he ? 'השהיה' : 'Pause') : (he ? 'הפעלה' : 'Play')}</button>
           {last ? (
             <button type="button" className="btn" onClick={onClose}>
-              Done
+              {he ? 'סיום' : 'Done'}
             </button>
           ) : (
             <button type="button" className="btn" onClick={() => setIndex(index + 1)}>
-              Next
+              {he ? 'הבא' : 'Next'}
             </button>
           )}
         </div>

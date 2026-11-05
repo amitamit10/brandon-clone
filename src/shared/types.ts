@@ -62,6 +62,8 @@ export interface ChatExtras {
   laughs: Record<string, number>
   /** the longest single laugh token and its sender; length 0 and sender '' when none */
   laughRecord: { sender: string; length: number }
+  /** Most frequent recognized address term used by each sender, when present. */
+  addressTerms?: { sender: string; term: string; count: number }[]
   topWords: [string, number][]
   topEmojis: [string, number][]
 }

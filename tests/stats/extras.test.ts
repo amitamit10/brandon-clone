@@ -47,6 +47,19 @@ const fixture = chatOf(fixtureRows)
 const extras = computeExtras(fixture)
 
 describe('computeExtras', () => {
+  it('finds a common term of address per sender without counting substrings', () => {
+    const result = computeExtras(chatOf([
+      [1, 1, 10, 0, 'Ana', 'אחי אחי, תודה חבר'],
+      [1, 1, 10, 1, 'Ben', 'bro, bro! brotherhood'],
+    ]))
+    expect(result.addressTerms).toEqual([{ sender: 'Ana', term: 'אחי', count: 2 }, { sender: 'Ben', term: 'bro', count: 2 }])
+  })
+
+  it('does not count URL fragments as words', () => {
+    const result = computeExtras(chatOf([[1, 1, 10, 0, 'Ana', 'https://example.com/banana hello hello']] ))
+    expect(result.topWords).toEqual([['hello', 2]])
+  })
+
   it('calendar counts every message per UTC day, sorted, only days with messages', () => {
     expect(extras.calendar).toEqual([
       { date: '2025-01-30', count: 1 },
