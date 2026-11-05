@@ -33,7 +33,10 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
   const job = useReportJob(reportId)
   const { view, viewError, reloadView } = useReportView(reportId, job.status)
 
-  const readingDone = job.status !== 'running' || (job.total > 0 && job.phase !== 'summarizing')
+  const readingDone =
+    job.status !== 'running' ||
+    (job.total > 0 && job.phase !== 'summarizing') ||
+    (job.total > 1 && job.progress >= job.total - 1)
   const show = searchParams.get('show')
   const step = clamp(Number(searchParams.get('step')) || 1, 1, STORY_COUNT)
 
@@ -129,7 +132,7 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
           <ReportView
             report={view.content}
             persona={view.persona}
-            actions={<ShareBox reportId={reportId} />}
+            actions={<ShareBox reportId={reportId} report={view.content} />}
             memberAction={settings ? (name) => <DeepDiveButton settings={settings} name={name} /> : undefined}
           />
           <div className="stack" style={{ gap: 20, marginTop: 28 }}>
@@ -160,6 +163,7 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
 
 function readingFraction(job: ReportJob): number {
   if (job.status !== 'running') return 1
+  if (job.total <= 0) return 0
   if (job.phase !== 'summarizing') return 1
   const chunks = job.total - 1
   return chunks > 0 ? Math.min(1, job.progress / chunks) : 0

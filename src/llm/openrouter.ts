@@ -10,6 +10,11 @@ export class OpenRouterProvider implements LlmProvider {
   ) {}
 
   async generate(req: LlmRequest): Promise<{ text: string }> {
+    const isReasoning =
+      this.model.includes('nemotron') ||
+      this.model.includes('reasoning') ||
+      this.model.includes('thinking') ||
+      this.model.includes('r1')
     const res = await globalThis.fetch(ENDPOINT, {
       method: 'POST',
       signal: req.signal ? AbortSignal.any([AbortSignal.timeout(LLM_SLOW_FETCH_TIMEOUT_MS), req.signal]) : AbortSignal.timeout(LLM_SLOW_FETCH_TIMEOUT_MS),
@@ -25,6 +30,7 @@ export class OpenRouterProvider implements LlmProvider {
         ],
         ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
         ...(req.json ? { response_format: { type: 'json_object' } } : {}),
+        ...(isReasoning ? { reasoning: { max_tokens: 0 } } : {}),
       }),
     })
     if (res.status === 429) {

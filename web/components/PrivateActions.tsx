@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { PersonaId } from '../../src/shared/types'
+import type { GroupReport, PersonaId } from '../../src/shared/types'
 import { createReport, deleteChat, deleteReport, shareReport, unshareReport, type CreateReportBody } from '../lib/api'
 import { addHistory, removeChat, removeReport } from '../lib/history'
 import { apiErrorMessage } from '../lib/messages'
 import { useI18n } from '../lib/i18n'
+import { parseAuraScore } from './ReportView'
 
 export const QUESTION_MAX = 500
 
@@ -38,20 +39,100 @@ export async function startReport(settings: ReaderSettings, body: CreateReportBo
   return reportId
 }
 
+export function formatReportForWhatsApp(report: GroupReport, link?: string, lang = 'he'): string {
+  const parts: string[] = []
+
+  if (report.title) {
+    parts.push(`🔥 *${report.title}*`)
+  }
+
+  if (report.verdict) {
+    parts.push(`\n⚖️ *${lang === 'he' ? 'הפסיקה של ברנדון:' : "Brandon's Verdict:"}*\n${report.verdict}`)
+  }
+
+  const withAura = (report.members ?? []).filter((m) => m.aura && m.aura.score)
+  if (withAura.length >= 2) {
+    const sorted = [...withAura].sort((a, b) => parseAuraScore(b.aura?.score) - parseAuraScore(a.aura?.score))
+    const first = sorted[0]
+    const second = sorted[1]
+    const third = sorted[2]
+    const lowest = sorted[sorted.length - 1]
+
+    parts.push(`\n🏆 *${lang === 'he' ? 'מדד האורה של ברנדון - הפודיום הקבוצתי:' : 'Aura Podium:'}*`)
+    if (first) parts.push(`🥇 *${first.name}*: ${first.aura?.score} (${lang === 'he' ? 'מלך האורה 👑' : 'Aura Boss 👑'})`)
+    if (second) parts.push(`🥈 *${second.name}*: ${second.aura?.score}`)
+    if (third) parts.push(`🥉 *${third.name}*: ${third.aura?.score}`)
+    if (lowest && lowest !== first && lowest !== second && parseAuraScore(lowest.aura?.score) < 0) {
+      parts.push(`💀 *${lang === 'he' ? 'פושט הרגל של האורה:' : 'Aura Bankruptcy:'}* ${lowest.name} (${lowest.aura?.score})`)
+    }
+  }
+
+  if (report.runningJokes && report.runningJokes.length > 0) {
+    parts.push(`\n🎭 *${lang === 'he' ? 'בדיחות רצות:' : 'Running Jokes:'}*`)
+    for (const joke of report.runningJokes.slice(0, 6)) {
+      parts.push(`• ${joke}`)
+    }
+  }
+
+  if (report.sections && report.sections.length > 0) {
+    for (const sec of report.sections) {
+      if (sec.heading && sec.body) {
+        parts.push(`\n${sec.emoji || '📌'} *${sec.heading}*\n${sec.body}`)
+      }
+    }
+  }
+
+  if (report.members && report.members.length > 0) {
+    parts.push(`\n👥 *${lang === 'he' ? 'ניתוח חברי הקבוצה:' : 'Group Members:'}*`)
+    for (const m of report.members) {
+      const auraTag = m.aura?.score ? ` [⚡ ${m.aura.score} - ${m.aura.status || ''}]` : ''
+      const nicknameTag = m.nickname ? ` ("${m.nickname}")` : ''
+      parts.push(`\n*${m.name}*${nicknameTag}${auraTag}:`)
+      if (m.opinion) parts.push(m.opinion)
+      if (m.quote) parts.push(`> "${m.quote}"`)
+    }
+  }
+
+  if (report.advice) {
+    parts.push(`\n💡 *${lang === 'he' ? 'מה לעשות עכשיו:' : 'What to do next:'}*\n${report.advice}`)
+  }
+
+  if (link) {
+    parts.push(`\n🔗 ${lang === 'he' ? 'לדוח האינטראקטיבי המלא:' : 'Full interactive report:'}\n${link}`)
+  }
+
+  return parts.join('\n')
+}
+
 /** Share, copy and stop sharing. The link is /s/<shareId> on this origin. */
-export function ShareBox({ reportId }: { reportId: string }) {
+export function ShareBox({ reportId, report }: { reportId: string; report?: GroupReport }) {
   const { t, lang } = useI18n()
   const [shareId, setShareId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(0)
+  const [copiedLink, setCopiedLink] = useState(0)
+  const [copiedText, setCopiedText] = useState(0)
   const link = shareId ? `${window.location.origin}/s/${shareId}` : ''
 
   const share = async () => {
     setBusy(true)
     setError(null)
     try {
-      setShareId(await shareReport(reportId))
+      const id = await shareReport(reportId)
+      setShareId(id)
+      const currentLink = `${window.location.origin}/s/${id}`
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        try {
+          const textToShare = report ? formatReportForWhatsApp(report, currentLink, lang) : currentLink
+          await navigator.share({
+            title: report?.title || 'Brandon Report',
+            text: textToShare,
+            url: currentLink,
+          })
+        } catch {
+          // User cancelled native share; the share box stays open
+        }
+      }
     } catch (e) {
       setError(apiErrorMessage(e))
     } finally {
@@ -59,13 +140,30 @@ export function ShareBox({ reportId }: { reportId: string }) {
     }
   }
 
-  const copy = async () => {
+  const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(link)
-      setCopied((n) => n + 1)
+      setCopiedLink((n) => n + 1)
     } catch {
       setError(lang === 'he' ? 'ההעתקה לא עבדה כאן. סמנו את הקישור והעתיקו.' : 'Copying did not work here. Select the link and copy it.')
     }
+  }
+
+  const copyFullText = async () => {
+    if (!report) return
+    try {
+      const fullText = formatReportForWhatsApp(report, link || undefined, lang)
+      await navigator.clipboard.writeText(fullText)
+      setCopiedText((n) => n + 1)
+    } catch {
+      setError(lang === 'he' ? 'העתקת הטקסט נכשלה.' : 'Failed to copy text.')
+    }
+  }
+
+  const whatsappShareUrl = () => {
+    if (!report) return `https://api.whatsapp.com/send?text=${encodeURIComponent(link)}`
+    const fullText = formatReportForWhatsApp(report, link || undefined, lang)
+    return `https://api.whatsapp.com/send?text=${encodeURIComponent(fullText)}`
   }
 
   const stop = async () => {
@@ -97,30 +195,57 @@ export function ShareBox({ reportId }: { reportId: string }) {
   }
 
   return (
-    <section className="card stack share-box" style={{ gap: 10 }} aria-labelledby="share-heading">
+    <section className="card stack share-box" style={{ gap: 12 }} aria-labelledby="share-heading">
       <h2 id="share-heading" className="report-h3">
         {lang === 'he' ? t.report.yourLink : 'Your link'}
       </h2>
-      <p className="small muted">
-        {lang === 'he' ? 'כל מי שיש לו קישור זה יכול לצפות בדוח. שום דבר אחר אינו משותף.' : 'Anyone with this link can read the report. Nothing else is shared.'}
+      <p className="small muted" style={{ margin: 0 }}>
+        {lang === 'he' ? 'שתפו את כל הדוח ישירות לוואטסאפ או העתיקו את הקישור והטקסט המלא.' : 'Share the entire report directly to WhatsApp or copy the link and full text.'}
       </p>
+
+      {/* WhatsApp Direct Share Button */}
+      <a
+        href={whatsappShareUrl()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn btn-primary btn-block"
+        style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px' }}
+      >
+        <span>💬 {t.report.shareWhatsApp}</span>
+      </a>
+
       <div className="share-link">
         <code className="share-url">{link}</code>
       </div>
-      <div className="row-actions">
+
+      <div className="row-actions" style={{ flexWrap: 'wrap', gap: 8 }}>
+        {report && (
+          <button
+            key={`text-${copiedText}`}
+            type="button"
+            className={`btn${copiedText > 0 ? ' hop' : ''}`}
+            onClick={copyFullText}
+            aria-live="polite"
+          >
+            <span aria-hidden="true">📋 </span>
+            {copiedText > 0 ? t.report.fullTextCopied : t.report.copyFullText}
+          </button>
+        )}
         <button
-          key={copied}
+          key={`link-${copiedLink}`}
           type="button"
-          className={`btn${copied > 0 ? ' hop' : ''}`}
-          onClick={copy}
+          className={`btn btn-ghost${copiedLink > 0 ? ' hop' : ''}`}
+          onClick={copyLink}
           aria-live="polite"
         >
-          {copied > 0 ? (lang === 'he' ? t.report.copied : 'Copied') : (lang === 'he' ? t.report.copyLink : 'Copy link')}
+          <span aria-hidden="true">🔗 </span>
+          {copiedLink > 0 ? t.report.copied : t.report.copyLink}
         </button>
         <button type="button" className="btn btn-ghost" onClick={stop} disabled={busy}>
           {busy ? (lang === 'he' ? 'מפסיק…' : 'Stopping…') : (lang === 'he' ? t.report.stopSharing : 'Stop sharing')}
         </button>
       </div>
+
       {error && (
         <p role="alert" className="field-error">
           {error}

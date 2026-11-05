@@ -149,6 +149,23 @@ function buildPrompt(a: ReportInput): string {
   ].join('\n\n')
 }
 
+function resolveParticipantName(name: string, known: Set<string>): string | null {
+  if (known.has(name)) return name
+  const clean = (s: string) => s.replace(/[\p{Emoji}\p{Symbol}\p{Punctuation}]/gu, '').trim().toLowerCase()
+  const targetClean = clean(name)
+  if (!targetClean) return null
+  for (const k of known) {
+    if (clean(k) === targetClean) return k
+  }
+  if (targetClean.length >= 3) {
+    for (const k of known) {
+      const kClean = clean(k)
+      if (kClean.startsWith(targetClean) || targetClean.startsWith(kClean)) return k
+    }
+  }
+  return null
+}
+
 function toReport(x: unknown, a: ReportInput): GroupReport {
   if (!isObject(x)) throw new Error('report is not an object')
   const followup = a.kind === 'followup'
@@ -187,8 +204,10 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
         : undefined
       aura = { score, status, ...(peak ? { peak } : {}), ...(loss ? { loss } : {}) }
     }
+    const rawName = str(m.name)
+    const canonicalName = resolveParticipantName(rawName, known)
     return {
-      name: str(m.name),
+      name: canonicalName ?? rawName,
       nickname: str(m.nickname),
       opinion: str(m.opinion, MAX_BODY_CHARS),
       ...(quote ? { quote } : {}),
