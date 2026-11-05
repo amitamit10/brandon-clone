@@ -21,6 +21,8 @@ export class NetworkError extends Error {
 
 export interface UploadChatBody {
   name: string
+  /** The uploader's own name, self-declared. Stored with the chat. */
+  uploaderName: string
   participants: string[]
   stats: ChatStats
   chunks: Chunk[]

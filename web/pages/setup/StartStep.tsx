@@ -6,6 +6,8 @@ import { createReport, uploadChat } from '../../lib/api'
 import { addHistory } from '../../lib/history'
 import { apiErrorMessage } from '../../lib/messages'
 import { PERSONA_NAMES } from '../../lib/personas'
+import { PRIVACY_TEXT } from '../../components/PrivacyNote'
+import { cleanName, saveUploaderName } from '../../lib/uploaderName'
 
 export interface StartStepProps {
   groupName: string
@@ -13,9 +15,10 @@ export interface StartStepProps {
   me: string | null
   persona: PersonaId
   language: string | null
+  uploaderName: string
 }
 
-export function StartStep({ groupName, analysed, me, persona, language }: StartStepProps) {
+export function StartStep({ groupName, analysed, me, persona, language, uploaderName }: StartStepProps) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,11 +36,14 @@ export function StartStep({ groupName, analysed, me, persona, language }: StartS
       if (!chatId) {
         chatId = await uploadChat({
           name,
+          uploaderName: cleanName(uploaderName),
           participants: analysed.chat.participants,
           stats: analysed.stats,
           chunks: analysed.chunks,
         })
         savedChatId.current = chatId
+        // Remembered for the next visit, only once the upload has succeeded.
+        saveUploaderName(uploaderName)
       }
       const reportId = await createReport(chatId, { persona, language, me, kind: 'group' })
       // Ids and a name only. The chat text never leaves memory in the browser.
@@ -81,7 +87,7 @@ export function StartStep({ groupName, analysed, me, persona, language }: StartS
         {busy ? 'Creating your report…' : 'Create my report'}
       </button>
       <p className="small muted" style={{ textAlign: 'center' }}>
-        Free-tier AI providers may use prompts for training.
+        {PRIVACY_TEXT}
       </p>
     </div>
   )

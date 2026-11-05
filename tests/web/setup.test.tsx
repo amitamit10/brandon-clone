@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AppRoutes } from '../../web/App'
 
-const PRIVACY = 'Free, for friends. Chats are sent to a free-tier AI provider that may use prompts for training.'
+const PRIVACY = 'Free, for friends. The site owner can read the chats and reports uploaded here, and chats are sent to a free AI provider (Google Gemini or OpenRouter) that may keep or train on them. Uploads are deleted after 30 days.'
 
 /** Android-style export with the given senders, cycling through them. */
 function chatText(count: number, senders: string[] = ['Ana', 'Ben']): string {
@@ -35,6 +35,9 @@ function renderAt(path: string) {
 }
 
 async function uploadChat(user: ReturnType<typeof userEvent.setup>, text = chatText(48)) {
+  // The uploader's name is required on the upload step.
+  const nameField = screen.getByLabelText('Your name')
+  if ((nameField as HTMLInputElement).value === '') await user.type(nameField, 'Dana')
   await user.upload(screen.getByLabelText('Chat export file'), txt(text))
   await waitFor(() => expect((continueButton() as HTMLButtonElement).disabled).toBe(false))
 }
@@ -87,6 +90,37 @@ describe('setup wizard', () => {
   it('shows the privacy notice on the upload step', () => {
     renderAt('/setup')
     expect(screen.getByText(PRIVACY)).toBeTruthy()
+  })
+
+  it('shows the same honest privacy notice on the final step', async () => {
+    const user = userEvent.setup()
+    renderAt('/setup')
+    await walkToStart(user)
+    expect(screen.getByText(PRIVACY)).toBeTruthy()
+    expect(screen.queryByText(/stays private|under your control/i)).toBeNull()
+  })
+
+  it('requires a name before the upload can continue, and prefills the remembered one', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('brandon.name', 'Remembered Rita')
+    renderAt('/setup')
+    expect((screen.getByLabelText('Your name') as HTMLInputElement).value).toBe('Remembered Rita')
+    await user.clear(screen.getByLabelText('Your name'))
+    await user.upload(screen.getByLabelText('Chat export file'), txt(chatText(48)))
+    await waitFor(() => expect((continueButton() as HTMLButtonElement).disabled).toBe(true))
+    await user.type(screen.getByLabelText('Your name'), 'Dana')
+    await waitFor(() => expect((continueButton() as HTMLButtonElement).disabled).toBe(false))
+  })
+
+  it('remembers the name in localStorage only after the chat upload succeeds', async () => {
+    const user = userEvent.setup()
+    const fetchMock = vi.fn(async () => jsonResponse(500, { error: 'internal' }))
+    vi.stubGlobal('fetch', fetchMock)
+    renderAt('/setup')
+    await walkToStart(user)
+    await user.click(screen.getByRole('button', { name: 'Create my report' }))
+    await screen.findByRole('alert')
+    expect(window.localStorage.getItem('brandon.name')).toBeNull()
   })
 
   it('shows a plain message when the upload is too small', async () => {
@@ -188,8 +222,9 @@ describe('setup wizard', () => {
     const [chatUrl, chatInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(chatUrl).toBe('/api/chats')
     const chatBody = JSON.parse(chatInit.body as string)
-    expect(Object.keys(chatBody).sort()).toEqual(['chunks', 'name', 'participants', 'stats'])
+    expect(Object.keys(chatBody).sort()).toEqual(['chunks', 'name', 'participants', 'stats', 'uploaderName'])
     expect(chatBody.name).toBe('The Boys')
+    expect(chatBody.uploaderName).toBe('Dana')
     expect(chatBody.participants).toEqual(['Ana', 'Ben'])
     expect(chatBody.stats.total).toBe(48)
     expect(chatBody.chunks[0]).toEqual(expect.objectContaining({ index: 0, fromId: 0 }))
@@ -209,6 +244,7 @@ describe('setup wizard', () => {
       expect.objectContaining({ chatId: 'chat-1', reportId: 'rep-1', name: 'The Boys' }),
     )
     expect(window.localStorage.getItem('brandon.history')).not.toContain('message number')
+    expect(window.localStorage.getItem('brandon.name')).toBe('Dana')
   })
 
   it('still starts a report when localStorage throws', async () => {
