@@ -121,7 +121,10 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   // a few dozen requests a day, so 24 summary calls per report would not fit).
   const totalChars = rows.reduce((n, r) => n + r.text.length, 0)
   const direct = env.LLM_DIRECT === '1' && totalChars <= directMaxChars(env)
-  const pending = direct ? undefined : rows.find((r) => r.summary === null)
+  const concurrency = Math.min(Number(env.CHUNK_CONCURRENCY) || 1, 6)
+  const unsummarized = direct ? [] : rows.filter((r) => r.summary === null)
+  const pendingBatch = unsummarized.slice(0, Math.max(1, concurrency))
+  const pending = pendingBatch[0]
   const summarized = direct ? 0 : rows.filter((r) => r.summary !== null).length
 
   // Throws no_llm_key_configured (mapped to 503 by the route). Not counted as a failure.
@@ -150,15 +153,18 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     return { status: 'failed', phase: 'failed', progress: summarized, total, error: 'llm_error' }
   }
 
-  if (pending) {
-    let summary: ChunkSummary
+  if (pendingBatch.length > 0) {
     try {
-      summary = await summarizeChunk(provider, { index: pending.idx, fromId: 0, toId: 0, text: pending.text }, report.language)
+      await Promise.all(
+        pendingBatch.map(async (c) => {
+          const summary = await summarizeChunk(provider, { index: c.idx, fromId: 0, toId: 0, text: c.text }, report.language)
+          await db.saveSummary(report.chatId, c.idx, summary)
+        }),
+      )
     } catch (err) {
       return recordFailure(db, reportId, err, { progress: summarized, total, pending: true }, claim.token, deps.usage)
     }
-    await db.saveSummary(report.chatId, pending.idx, summary)
-    const progress = summarized + 1
+    const progress = summarized + pendingBatch.length
     if (!(await db.advanceProgress(reportId, { progress, total }, claim.token))) {
       const current = await db.getReport(reportId)
       return current ? stateOf(current, true) : null

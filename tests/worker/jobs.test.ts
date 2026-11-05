@@ -182,5 +182,16 @@ describe('direct mode (LLM_DIRECT=1): one model call for the whole chat', () => 
     expect(provider.calls[0].prompt).toContain('who said hello there')
     expect(state).toMatchObject({ status: 'done' })
   })
+
+  it('parallel chunk summarization: summarizes multiple chunks concurrently when CHUNK_CONCURRENCY is set', async () => {
+    const now = () => 7_400_000
+    const { reportId, chunks } = await setup(now)
+    expect(chunks).toBeGreaterThanOrEqual(4)
+    const provider = fakeProvider()
+    const envWithConcurrency = { ...E, CHUNK_CONCURRENCY: '3' } as Env
+    const state = await advanceReport(envWithConcurrency, reportId, { provider, now })
+    expect(state).toMatchObject({ status: 'running', progress: 3 })
+    expect(provider.calls).toHaveLength(3)
+  })
 })
 

@@ -18,6 +18,8 @@ export interface Env {
   /** '1' = send the whole chat to the model in one call instead of chunk summaries */
   LLM_DIRECT?: string
   LLM_DIRECT_MAX_CHARS?: string
+  /** Number of chunks to summarize concurrently in parallel (e.g. '4') when not in direct mode */
+  CHUNK_CONCURRENCY?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   LLM_PRIMARY?: 'gemini' | 'openrouter'
