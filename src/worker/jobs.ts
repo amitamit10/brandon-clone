@@ -43,7 +43,7 @@ const phaseOf = (status: ReportStatus, pendingSummaries: boolean): JobPhase => {
 }
 
 /** How long one advance may hold a report. A crashed holder is retried after this. */
-export const LEASE_MS = 120_000
+export const LEASE_MS = 240_000
 
 /**
  * Advances a report by at most ONE LLM call. If some chunk has no stored summary, that chunk is

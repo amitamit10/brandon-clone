@@ -3,8 +3,12 @@ import { GeminiProvider } from './gemini'
 import { OpenRouterProvider } from './openrouter'
 import { createFallbackProvider, type LlmProvider } from './provider'
 
-/** Verified against https://openrouter.ai/api/v1/models on 2026-11-05 (a `:free` model). */
-export const DEFAULT_OPENROUTER_MODEL = 'google/gemma-4-31b-it:free'
+/**
+ * Verified against https://openrouter.ai/api/v1/models on 2026-11-05: free, 1,048,576-token context, JSON mode.
+ * It is a 'stealth' model: prompts may be retained by its provider but are not used for training.
+ * Slow (about 7 tokens/s), so OpenRouter calls get the longer timeout.
+ */
+export const DEFAULT_OPENROUTER_MODEL = 'stealth/crouton-alpha'
 
 /**
  * Gemini models tried in order (checked against the live model list on 2026-11-05). Free-tier models

@@ -52,5 +52,19 @@ describe('createProviderFromEnv', () => {
     expect(new Set(DEFAULT_GEMINI_MODELS).size).toBeGreaterThanOrEqual(3)
     expect(DEFAULT_GEMINI_MODELS).not.toContain('gemini-2.5-flash')
   })
+
+  it('uses stealth/crouton-alpha on OpenRouter by default and lets OPENROUTER_MODEL override it', async () => {
+    const models: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        models.push(JSON.parse(String(init?.body)).model)
+        return openrouterOk()
+      }),
+    )
+    await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key' })).generate({ system: 's', prompt: 'p' })
+    await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key', OPENROUTER_MODEL: 'vendor/other:free' })).generate({ system: 's', prompt: 'p' })
+    expect(models).toEqual(['stealth/crouton-alpha', 'vendor/other:free'])
+  })
 })
 

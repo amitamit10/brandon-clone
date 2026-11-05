@@ -35,6 +35,8 @@ const BACKOFF_BASE_MS = 1000
 export const MAX_RETRY_WAIT_MS = 30_000
 /** Upper bound for a single upstream HTTP call. */
 export const LLM_FETCH_TIMEOUT_MS = 60_000
+/** For slow free models (about 7 tokens/s: a 1,000-token answer takes over two minutes). */
+export const LLM_SLOW_FETCH_TIMEOUT_MS = 180_000
 
 /**
  * Tries providers in order. Any error falls through to the next provider.
