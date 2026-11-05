@@ -7,16 +7,36 @@ import { createFallbackProvider, type LlmProvider } from './provider'
 export const DEFAULT_OPENROUTER_MODEL = 'google/gemma-4-31b-it:free'
 
 /**
+ * Gemini models tried in order (checked against the live model list on 2026-11-05). Free-tier models
+ * are often overloaded (503) or retired for new users (404, e.g. gemini-2.5-flash), so there is a
+ * chain: when one fails the next is tried, and only then does the backoff sleep. Override with the
+ * comma-separated GEMINI_MODELS env var.
+ */
+export const DEFAULT_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-3.6-flash']
+
+const MODEL_NAME = /^[a-z0-9][a-z0-9.-]{1,58}$/
+
+function geminiModels(env: Env): string[] {
+  const wanted = (env.GEMINI_MODELS ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => MODEL_NAME.test(m))
+  return wanted.length > 0 ? wanted : DEFAULT_GEMINI_MODELS
+}
+
+/**
  * Builds the provider chain from env. Gemini is primary unless LLM_PRIMARY is 'openrouter'.
  * Only providers with a key are used. Wrapped in the fallback provider with 3 retry rounds.
  */
 export function createProviderFromEnv(env: Env): LlmProvider {
-  const gemini = env.GEMINI_API_KEY ? new GeminiProvider(env.GEMINI_API_KEY) : undefined
+  const gemini = env.GEMINI_API_KEY
+    ? geminiModels(env).map((model) => new GeminiProvider(env.GEMINI_API_KEY as string, model))
+    : []
   const openrouter = env.OPENROUTER_API_KEY
     ? new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL)
     : undefined
-  const ordered: (LlmProvider | undefined)[] = env.LLM_PRIMARY === 'openrouter' ? [openrouter, gemini] : [gemini, openrouter]
-  const providers = ordered.filter((p): p is LlmProvider => p !== undefined)
+  const others: LlmProvider[] = openrouter ? [openrouter] : []
+  const providers: LlmProvider[] = env.LLM_PRIMARY === 'openrouter' ? [...others, ...gemini] : [...gemini, ...others]
   if (providers.length === 0) throw new Error('no_llm_key_configured')
   return createFallbackProvider(providers, {
     retries: 3,

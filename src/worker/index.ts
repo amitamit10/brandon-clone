@@ -9,6 +9,7 @@ export interface Env {
   DB: D1Database
   ASSETS: Fetcher
   GEMINI_API_KEY?: string
+  GEMINI_MODELS?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   LLM_PRIMARY?: 'gemini' | 'openrouter'
