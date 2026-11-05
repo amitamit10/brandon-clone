@@ -467,6 +467,26 @@ function ReportCard({ report, onRun }: { report: ReportView; onRun: (action: () 
       {report.question && <p className="small">Question: {report.question}</p>}
       {report.content ? <ReportBody content={report.content} /> : <p className="muted small">No report text yet.</p>}
       <div className="admin-actions">
+        {report.shareId && (
+          <a
+            href={`/s/${report.shareId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-primary"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
+            🔗 Open Shared Report ↗
+          </a>
+        )}
+        <a
+          href={`/report/${report.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-ghost"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+        >
+          📄 View Report Page ↗
+        </a>
         {report.shared && (
           <TwoStep label="Stop sharing" confirmLabel="Confirm stop sharing" onConfirm={() => onRun(() => adminApi.unshareReport(report.id))} />
         )}
@@ -491,8 +511,26 @@ function ReportBody({ content }: { content: ReportContent }) {
         <ul className="admin-members">
           {(content.members ?? []).map((m, i) => (
             <li key={i}>
-              <strong>{m.name}</strong>
-              {m.opinion ? ` — ${m.opinion}` : ''}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <strong>{m.name}</strong>
+                {m.nickname && <span className="muted small">“{m.nickname}”</span>}
+                {m.aura?.score && (
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      background: m.aura.score.startsWith('-') ? 'rgba(239, 68, 68, 0.12)' : 'rgba(121, 40, 202, 0.12)',
+                      color: m.aura.score.startsWith('-') ? '#dc2626' : '#7928ca',
+                      border: '1px solid currentColor',
+                    }}
+                  >
+                    ⚡ {m.aura.score} {m.aura.status ? `(${m.aura.status})` : ''}
+                  </span>
+                )}
+              </div>
+              {m.opinion ? <p style={{ margin: '4px 0' }}>{m.opinion}</p> : null}
               {m.quote ? <blockquote>{m.quote}</blockquote> : null}
             </li>
           ))}

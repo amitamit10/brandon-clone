@@ -425,6 +425,7 @@ export function createAdminApp(deps: AdminDeps = {}) {
         error: r.error && ERROR_CODE_RE.test(r.error) ? r.error : r.error ? 'other' : null,
         createdAt: r.created_at,
         shared: r.share_id !== null,
+        shareId: r.share_id,
         content: r.content_json === null ? null : (JSON.parse(r.content_json) as unknown),
       })),
     })

@@ -53,7 +53,7 @@ describe('createProviderFromEnv', () => {
     expect(DEFAULT_GEMINI_MODELS).not.toContain('gemini-2.5-flash')
   })
 
-  it('uses stealth/crouton-alpha on OpenRouter by default and lets OPENROUTER_MODEL override it', async () => {
+  it('uses nemotron on OpenRouter by default and lets OPENROUTER_MODEL override it', async () => {
     const models: string[] = []
     vi.stubGlobal(
       'fetch',
@@ -64,7 +64,7 @@ describe('createProviderFromEnv', () => {
     )
     await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key' })).generate({ system: 's', prompt: 'p' })
     await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key', OPENROUTER_MODEL: 'vendor/other:free' })).generate({ system: 's', prompt: 'p' })
-    expect(models).toEqual(['stealth/crouton-alpha', 'vendor/other:free'])
+    expect(models).toEqual(['nvidia/nemotron-3.5-super-vl:free', 'vendor/other:free'])
   })
 
   it('the report step tries the stronger Gemini models first, the summary step starts with the fast one', async () => {
@@ -96,8 +96,8 @@ describe('createProviderFromEnv', () => {
     expect(models).toEqual(['vendor/a:free', 'vendor/b:free'])
   })
 
-  it('the default OpenRouter chain has crouton first and a second distinct free model', () => {
-    expect(DEFAULT_OPENROUTER_MODELS[0]).toBe('stealth/crouton-alpha')
+  it('the default OpenRouter chain has nemotron first and distinct free fallbacks', () => {
+    expect(DEFAULT_OPENROUTER_MODELS[0]).toBe('nvidia/nemotron-3.5-super-vl:free')
     expect(new Set(DEFAULT_OPENROUTER_MODELS).size).toBeGreaterThanOrEqual(2)
     expect(DEFAULT_OPENROUTER_MODELS.every((m) => m.endsWith(':free') || m.startsWith('stealth/'))).toBe(true)
   })

@@ -75,6 +75,7 @@ export interface ReportView {
   error: string | null
   createdAt: number
   shared: boolean
+  shareId?: string | null
   content: ReportContent | null
 }
 
@@ -84,7 +85,13 @@ export interface ReportContent {
   verdict?: string
   dynamic?: string
   sections?: { heading?: string; body?: string }[]
-  members?: { name?: string; nickname?: string; opinion?: string; quote?: string }[]
+  members?: {
+    name?: string
+    nickname?: string
+    opinion?: string
+    quote?: string
+    aura?: { score?: string; status?: string }
+  }[]
   advice?: string
 }
 

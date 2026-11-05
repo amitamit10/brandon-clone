@@ -47,14 +47,17 @@ export function instrument(p: LlmProvider, hooks: ProviderHooks = {}): LlmProvid
 }
 
 /**
- * Verified against https://openrouter.ai/api/v1/models on 2026-11-05: free, 1,048,576-token context, JSON mode.
- * It is a 'stealth' model: prompts may be retained by its provider but are not used for training.
- * Slow (about 7 tokens/s), so OpenRouter calls get the longer timeout.
+ * Verified against https://openrouter.ai/api/v1/models on 2026-11-05: free, 1M-token context, JSON mode.
+ * NVIDIA Nemotron 3.5 provides high throughput (~2,000-6,000 tokens/s) via hybrid Mamba-Transformer MoE.
  */
-export const DEFAULT_OPENROUTER_MODEL = 'stealth/crouton-alpha'
+export const DEFAULT_OPENROUTER_MODEL = 'nvidia/nemotron-3.5-super-vl:free'
 
-/** Free OpenRouter models, tried in order (both 1M-token context, JSON mode; checked 2026-11-05). */
-export const DEFAULT_OPENROUTER_MODELS = [DEFAULT_OPENROUTER_MODEL, 'nvidia/nemotron-3.5-super-vl:free']
+/** Free OpenRouter models, tried in order (1M-token context, JSON mode; checked 2026-11-05). */
+export const DEFAULT_OPENROUTER_MODELS = [
+  DEFAULT_OPENROUTER_MODEL,
+  'nvidia/nemotron-3.5-lightning:free',
+  'stealth/crouton-alpha',
+]
 
 function openrouterModels(env: Env): string[] {
   if (env.OPENROUTER_MODEL) return [env.OPENROUTER_MODEL] // single-model override

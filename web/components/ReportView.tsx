@@ -58,6 +58,8 @@ export function ReportView({ report, persona, actions, memberAction }: ReportVie
           </Section>
         )}
 
+        <AuraPodium members={report.members} t={t} lang={lang} />
+
         {report.dynamic && (
           <Section heading={lang === 'he' ? t.report.groupDynamic : 'The group dynamic'} emoji="🕸️">
             <SafeText text={report.dynamic} />
@@ -93,7 +95,6 @@ export function ReportView({ report, persona, actions, memberAction }: ReportVie
             <h2 id="people-heading" className="report-h2">
               {lang === 'he' ? t.report.thePeople : 'The people'}
             </h2>
-            <AuraPodium members={report.members} t={t} lang={lang} />
             {report.members.map((m, i) => (
               <article id={`member-${encodeURIComponent(m.name)}`} key={`${m.name}-${i}`} className="card member-profile">
                 <header className="member-profile-head">
