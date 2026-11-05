@@ -13,13 +13,16 @@ const BACKDROP: Record<PersonaId, string> = {
   diego: '#bdf2de',
 }
 const LABEL: Record<PersonaId, string> = {
-  brandon: 'Brandon the cat, in a bucket hat and round sunglasses',
+  brandon: 'Brandon mascot',
   clara: 'Clara the cat, with a flower and heart-shaped glasses',
   diego: 'Diego the cat, in a headband with a whistle',
 }
 
-/** Original flat cat artwork. Each persona differs only by its accessories. */
+/** Brandon uses the illustrated brand mark; the other personas retain their original artwork. */
 export function Mascot({ persona, size = 96 }: MascotProps) {
+  if (persona === 'brandon') {
+    return <img src="/brand/brandon-mascot.webp" alt={LABEL.brandon} width={size} height={size} className="mascot" data-persona="brandon" />
+  }
   return (
     <svg
       role="img"
@@ -42,10 +45,8 @@ export function Mascot({ persona, size = 96 }: MascotProps) {
         fill="none"
       />
       <path d="M55 74 L65 74 L60 80 Z" fill="#ff8fb1" stroke={INK} strokeWidth="2" strokeLinejoin="round" />
-      {persona === 'brandon' && <BrandonMouth />}
       {persona === 'clara' && <ClaraMouth />}
       {persona === 'diego' && <DiegoMouth />}
-      {persona === 'brandon' && <BrandonFace />}
       {persona === 'clara' && <ClaraFace />}
       {persona === 'diego' && <DiegoFace />}
     </svg>
@@ -57,28 +58,6 @@ function Eyes() {
     <g fill={INK}>
       <circle cx="46" cy="66" r="3.5" />
       <circle cx="74" cy="66" r="3.5" />
-    </g>
-  )
-}
-
-function BrandonMouth() {
-  // A one-sided smirk.
-  return <path d="M50 88 Q62 92 74 84" stroke={INK} strokeWidth="2.5" strokeLinecap="round" fill="none" />
-}
-
-function BrandonFace() {
-  return (
-    <g>
-      {/* bucket hat: crown and brim */}
-      <path d="M36 46 L40 20 Q60 12 80 20 L84 46 Z" fill="#f2c14e" stroke={INK} strokeWidth="3" strokeLinejoin="round" />
-      <ellipse cx="60" cy="46" rx="42" ry="7" fill="#f2c14e" stroke={INK} strokeWidth="3" />
-      {/* round sunglasses */}
-      <g fill={INK}>
-        <circle cx="46" cy="66" r="11" />
-        <circle cx="74" cy="66" r="11" />
-      </g>
-      <path d="M57 64 L63 64" stroke={INK} strokeWidth="3" />
-      <path d="M36 62 L30 60 M84 62 L90 60" stroke={INK} strokeWidth="2.5" strokeLinecap="round" />
     </g>
   )
 }

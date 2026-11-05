@@ -37,7 +37,7 @@ describe('ReportView', () => {
   it('renders model text through SafeText, so markup and links stay literal', () => {
     const report = { ...reportContent, advice: '<img src=x onerror=1> and [a](http://evil)' }
     const { container } = render(<ReportView report={report} persona="brandon" />)
-    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector('.report-body img')).toBeNull()
     expect(container.querySelector('a')).toBeNull()
     expect(screen.getByText('<img src=x onerror=1> and [a](http://evil)')).toBeTruthy()
   })

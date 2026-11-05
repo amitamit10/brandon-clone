@@ -1940,4 +1940,4 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 .landing-chat-ideas h2 { font-size:clamp(1.4rem,5vw,2rem); }
 @keyframes landing-chat-scroll { to { transform:translateY(-50%); } }
 @media (prefers-reduced-motion:reduce) { .landing-avatars > span, .landing-chat-stream { animation:none; } }
-@media (max-width:480px) { .landing-avatars > span { width:48px; height:48px; font-size:22px; } .landing-avatar-mascot svg { width:100%; height:100%; } }
+@media (max-width:480px) { .landing-avatars > span { width:48px; height:48px; font-size:22px; } .landing-avatar-mascot .mascot { width:100%; height:100%; } }
