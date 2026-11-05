@@ -26,13 +26,29 @@ export async function bump(d1: D1Database, day: string, metric: string, key: str
     .run()
 }
 
+/** Shortest secret used to key visitor values. Shorter (or missing) means visitors are not recorded. */
+export const VISITOR_SECRET_MIN = 24
+
 /**
- * Counts one anonymous visitor for the day. The stored value is sha256(`${day}:${ipBucketKey}`), so the same
- * person gets a different value on every day, and the IP itself is never stored.
+ * The key for visitor values: VISITOR_SECRET, or ADMIN_TOKEN when VISITOR_SECRET is missing. Null when the
+ * chosen secret is missing or too short. The secret is only ever used as an HMAC key, never stored or logged.
  */
-export async function recordVisitor(d1: D1Database, day: string, ipBucketKey: string): Promise<void> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${day}:${ipBucketKey}`))
-  const visitor = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+export function visitorSecret(env: { VISITOR_SECRET?: string; ADMIN_TOKEN?: string }): string | null {
+  const secret = env.VISITOR_SECRET ?? env.ADMIN_TOKEN
+  return typeof secret === 'string' && secret.length >= VISITOR_SECRET_MIN ? secret : null
+}
+
+/**
+ * Counts one anonymous visitor for the day. The stored value is HMAC-SHA-256(secret, `${day}:${ipBucketKey}`):
+ * keyed, so an IP cannot be brute-forced from the table, and per day, so the same person differs across days.
+ * The IP itself is never stored. Without a usable secret nothing is written.
+ */
+export async function recordVisitor(d1: D1Database, secret: string | null | undefined, day: string, ipBucketKey: string): Promise<void> {
+  if (!secret || secret.length < VISITOR_SECRET_MIN) return
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(`${day}:${ipBucketKey}`))
+  const visitor = Array.from(new Uint8Array(mac), (b) => b.toString(16).padStart(2, '0')).join('')
   await d1.prepare('INSERT OR IGNORE INTO visitors (day, visitor) VALUES (?, ?)').bind(day, visitor).run()
 }
 

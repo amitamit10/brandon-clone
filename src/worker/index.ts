@@ -4,7 +4,7 @@ import { advanceReport } from './jobs'
 import { createDb, randomId, type ReportRow } from './db'
 import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
-import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor } from './usage'
+import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor, visitorSecret } from './usage'
 import { cleanOneLine } from '../pipeline/safety'
 
 export interface Env {
@@ -15,6 +15,10 @@ export interface Env {
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   LLM_PRIMARY?: 'gemini' | 'openrouter'
+  /** Admin dashboard. Disabled unless at least 24 characters. */
+  ADMIN_TOKEN?: string
+  /** HMAC key for anonymous visitor values. Falls back to ADMIN_TOKEN. */
+  VISITOR_SECRET?: string
 }
 
 export interface AppDeps {
@@ -164,7 +168,7 @@ export function createApp(deps: AppDeps = {}) {
     await quietly(async () => {
       await bump(c.env.DB, day, 'upload', 'all')
       await bump(c.env.DB, day, 'upload_bytes', 'all', Math.ceil(raw.byteLength / 1024))
-      await recordVisitor(c.env.DB, day, clientKey(c))
+      await recordVisitor(c.env.DB, visitorSecret(c.env), day, clientKey(c))
     })
     return c.json(
       {
@@ -199,7 +203,7 @@ export function createApp(deps: AppDeps = {}) {
     const day = dayOf(now())
     await quietly(async () => {
       await bump(c.env.DB, day, 'report_created', req.kind)
-      await recordVisitor(c.env.DB, day, clientKey(c))
+      await recordVisitor(c.env.DB, visitorSecret(c.env), day, clientKey(c))
     })
     return c.json({ reportId }, 201)
   })
