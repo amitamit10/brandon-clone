@@ -1919,3 +1919,25 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
   border-left: none;
   border-right: 3px solid #ef4444;
 }
+
+/* Landing: an avatar lineup and a fictional conversation set the scene. */
+.landing-avatars { display:flex; justify-content:center; align-items:center; direction:ltr; margin: 28px auto 30px; }
+.landing-avatars > span { display:grid; place-items:center; width:60px; height:60px; margin-inline-start:-5px; border:3px solid white; border-radius:50%; font-size:27px; box-shadow:0 2px 6px #0002; background:#d7f3e5; animation:look-in .42s var(--ease-pop) both; }
+.landing-avatars > span:nth-child(3n+1) { background:#ffd6e8; }
+.landing-avatars > span:nth-child(3n+2) { background:#d8d9ff; animation-delay:.1s; }
+.landing-avatars > span:nth-child(3n) { background:#ffeaa7; animation-delay:.2s; }
+.landing-avatar-mascot { overflow:hidden; background:#ffe280 !important; }
+.landing-conversation { margin:48px auto 12px; max-width:360px; text-align:center; }
+.landing-chat-window { height:300px; overflow:hidden; margin-top:12px; direction:ltr; mask-image:linear-gradient(transparent,#000 18%,#000 82%,transparent); }
+.landing-chat-stream { animation:landing-chat-scroll 38s linear infinite; }
+.landing-chat-copy { display:flex; flex-direction:column; gap:8px; padding:4px 8px; }
+.landing-chat-bubble { max-width:78%; display:grid; text-align:start; gap:2px; padding:8px 10px; border-radius:12px; background:#f3f3f3; box-shadow:0 1px 2px #0001; font-size:.82rem; }
+.landing-chat-bubble.in { align-self:flex-start; }
+.landing-chat-bubble.out { align-self:flex-end; background:#dcf8c6; }
+.landing-chat-bubble strong { color:#597ca9; font-size:.7rem; }
+.landing-chat-bubble time { color:#888; text-align:end; font-size:.65rem; }
+.landing-chat-ideas { margin:48px 0 0; text-align:center; }
+.landing-chat-ideas h2 { font-size:clamp(1.4rem,5vw,2rem); }
+@keyframes landing-chat-scroll { to { transform:translateY(-50%); } }
+@media (prefers-reduced-motion:reduce) { .landing-avatars > span, .landing-chat-stream { animation:none; } }
+@media (max-width:480px) { .landing-avatars > span { width:48px; height:48px; font-size:22px; } .landing-avatar-mascot svg { width:100%; height:100%; } }

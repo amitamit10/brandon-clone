@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Mascot } from '../components/Mascot'
-import { RingCluster } from '../components/RingCluster'
 import { ChatMarquee } from '../components/ChatMarquee'
 import { PrivacyNote } from '../components/PrivacyNote'
 import { LanguageToggle } from '../components/LanguageToggle'
@@ -38,7 +37,9 @@ export function Landing() {
 
       <main className="wrap">
         <section className="hero" aria-labelledby="hero-heading">
-          <RingCluster />
+          <div className="landing-avatars" aria-hidden="true">
+            <span>🎉</span><span>💬</span><span>🏡</span><span className="landing-avatar-mascot"><Mascot persona="brandon" size={58} /></span><span>🐐</span><span>✨</span><span>📱</span>
+          </div>
           <h1 id="hero-heading">{t.landing.heroHeading}</h1>
           <p className="hero-sub">{t.landing.heroSub}</p>
           <Link className="btn btn-block" to="/setup">
@@ -46,7 +47,33 @@ export function Landing() {
           </Link>
         </section>
 
-        <ChatMarquee selectedId={picked?.id ?? null} onPick={setPicked} />
+        <section className="landing-conversation" aria-label={isRTL ? 'שיחת וואטסאפ לדוגמה' : 'Fictional WhatsApp conversation'}>
+          <p className="small muted">{isRTL ? 'שיחה מומצאת לדוגמה' : 'Fictional example conversation'}</p>
+          <div className="landing-chat-window" aria-hidden="true">
+            <div className="landing-chat-stream">
+              {[0, 1].map((copy) => <div key={copy} className="landing-chat-copy">
+                {(isRTL ? [
+                  ['in', 'נועם', 'אז נפגשים בשבת?', '14:06'], ['out', '', 'הזמנתי שולחן לשמונה', '14:10'],
+                  ['in', 'דנה', 'רק עכשיו ראיתי 😅', '14:14'], ['out', '', 'שלחת הודעה לפני דקה', '14:18'],
+                  ['in', 'דנה', 'זה משהו אחר', '14:22'], ['out', '', 'אז כולם באים?', '14:26'],
+                  ['in', 'דנה', 'כן! מבטיחה', '14:30'],
+                ] : [
+                  ['in', 'Noam', 'Are we still on for Saturday?', '14:06'], ['out', '', 'Booked a table for eight', '14:10'],
+                  ['in', 'Dana', 'Only just saw this 😅', '14:14'], ['out', '', 'You sent a message a minute ago', '14:18'],
+                  ['in', 'Dana', 'That is different', '14:22'], ['out', '', 'So is everyone coming?', '14:26'],
+                  ['in', 'Dana', 'Yes! Promise', '14:30'],
+                ]).map(([side, sender, message, time], i) => <div className={`landing-chat-bubble ${side}`} key={i}>
+                  {sender && <strong>{sender}</strong>}<span>{message}</span><time>{time}</time>
+                </div>)}
+              </div>)}
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-chat-ideas" aria-labelledby="chat-ideas-title">
+          <h2 id="chat-ideas-title">{isRTL ? 'איזו קבוצה מסקרנת אתכם?' : 'Which group are you curious about?'}</h2>
+          <ChatMarquee selectedId={picked?.id ?? null} onPick={setPicked} />
+        </section>
 
         <section className="demo-area" aria-labelledby="demo-heading">
           <h2 id="demo-heading" className="step-title" style={{ fontSize: '1.3rem' }}>

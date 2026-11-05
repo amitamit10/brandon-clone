@@ -33,6 +33,12 @@ describe('Landing page', () => {
     expect(await screen.findByText('Setup page')).toBeTruthy()
   })
 
+  it('shows a clearly labeled sample conversation', () => {
+    renderLanding()
+    expect(screen.getByLabelText('Fictional WhatsApp conversation')).toBeTruthy()
+    expect(screen.getByText('Fictional example conversation')).toBeTruthy()
+  })
+
   it('shows the privacy notice', () => {
     renderLanding()
     expect(
