@@ -73,4 +73,22 @@ describe('chunkMessages', () => {
   it('returns no chunks for a chat without messages', () => {
     expect(chunkMessages(chatOf([]))).toEqual([])
   })
+
+  it('smartly samples up to maxChunks prioritizing high-banter chunks', () => {
+    // create 100 dummy chunks
+    const chunks = Array.from({ length: 100 }, (_, i) => ({
+      index: i,
+      fromId: i * 10,
+      toId: (i + 1) * 10,
+      text: i === 50 ? '12:00 Ana: חחחחחחחחחח ענק! 😂 12:01 Ben: מה הלוז חחחח' : '10:00 Ana: ok',
+    }))
+    const sampled = chunkMessages(
+      chatOf(Array.from({ length: 1000 }, (_, id) => ({ ts: T0 + id * 60_000, sender: 'Ana', text: 'ok' }))),
+      1000,
+      20,
+    )
+    expect(sampled.length).toBeLessThanOrEqual(20)
+    expect(sampled[0].index).toBe(0)
+    expect(sampled[sampled.length - 1].index).toBe(sampled.length - 1)
+  })
 })

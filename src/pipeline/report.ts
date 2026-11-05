@@ -23,7 +23,7 @@ export interface ReportInput {
   retrieved?: string[]
 }
 
-const MAX_SUMMARY_CHARS = 40_000
+const MAX_SUMMARY_CHARS = 75_000
 /** Upper bound for a direct-mode transcript (about 700k tokens of mixed Hebrew/English). */
 export const MAX_TRANSCRIPT_CHARS = 2_500_000
 const MAX_RETRIEVED_CHARS = 8_000
@@ -190,13 +190,21 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     if (!isObject(m)) throw new Error('member is not an object')
     // A quote may be absent (undefined or null). If present it must be a string.
     const quote = m.quote === undefined || m.quote === null ? undefined : str(m.quote)
-    const animal = typeof m.animal === 'string' && m.animal.trim().length > 0 ? str(m.animal) : undefined
-    const smurf = typeof m.smurf === 'string' && m.smurf.trim().length > 0 ? str(m.smurf) : undefined
-    const futurePrediction = typeof m.futurePrediction === 'string' && m.futurePrediction.trim().length > 0 ? str(m.futurePrediction) : undefined
-    const charisma = typeof m.charisma === 'string' && m.charisma.trim().length > 0 ? str(m.charisma) : undefined
-    const selfImage = typeof m.selfImage === 'string' && m.selfImage.trim().length > 0 ? str(m.selfImage) : undefined
-    const favoriteCurse = typeof m.favoriteCurse === 'string' && m.favoriteCurse.trim().length > 0 ? str(m.favoriteCurse) : undefined
-    const roast = typeof m.roast === 'string' && m.roast.trim().length > 0 ? str(m.roast, MAX_BODY_CHARS) : undefined
+    const getField = (keys: string[], max = MAX_SHORT_CHARS): string | undefined => {
+      for (const k of keys) {
+        const val = (m as Record<string, unknown>)[k]
+        if (typeof val === 'string' && val.trim().length > 0) return str(val, max)
+      }
+      return undefined
+    }
+
+    const animal = getField(['animal', 'spiritAnimal', 'spirit_animal', 'favoriteAnimal', 'favorite_animal'])
+    const smurf = getField(['smurf', 'smurfPersona', 'smurf_persona', 'smurfCharacter', 'smurf_character'])
+    const futurePrediction = getField(['futurePrediction', 'future_prediction', 'future', 'prediction'])
+    const charisma = getField(['charisma', 'charismaScore', 'charisma_score', 'charm'])
+    const selfImage = getField(['selfImage', 'self_image', 'selfPerception', 'self_perception', 'look'])
+    const favoriteCurse = getField(['favoriteCurse', 'favorite_curse', 'curse', 'catchphrase', 'slang'])
+    const roast = getField(['roast', 'personalRoast', 'personal_roast'], MAX_BODY_CHARS)
 
     let aura: MemberAura | undefined = undefined
     if (isObject(m.aura)) {

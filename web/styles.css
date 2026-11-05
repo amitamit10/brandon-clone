@@ -2345,3 +2345,20 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 .trait-future .trait-kicker {
   color: #0284c7;
 }
+
+@media (prefers-color-scheme: dark) {
+  .member-roast-callout {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(249, 115, 22, 0.1) 100%);
+    border-color: rgba(239, 68, 68, 0.4);
+  }
+  .roast-callout-text {
+    color: #f3f4f6;
+  }
+  .trait-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  .trait-text {
+    color: #f1f5f9;
+  }
+}

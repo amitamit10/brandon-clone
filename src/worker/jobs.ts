@@ -117,8 +117,6 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   if (!chat) return null
   const rows = await db.getChunks(report.chatId)
   const total = rows.length + 1
-  // Direct mode: models with a ~1M-token context can read the whole chat in ONE call (free tiers allow only
-  // a few dozen requests a day, so 24 summary calls per report would not fit).
   const totalChars = rows.reduce((n, r) => n + r.text.length, 0)
   const direct = env.LLM_DIRECT === '1' && totalChars <= directMaxChars(env)
   const concurrency = Math.min(Number(env.CHUNK_CONCURRENCY) || 1, 6)
