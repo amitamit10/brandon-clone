@@ -93,8 +93,9 @@ export function ReportView({ report, persona, actions, memberAction }: ReportVie
             <h2 id="people-heading" className="report-h2">
               {lang === 'he' ? t.report.thePeople : 'The people'}
             </h2>
+            <AuraPodium members={report.members} t={t} lang={lang} />
             {report.members.map((m, i) => (
-              <article key={`${m.name}-${i}`} className="card member-profile">
+              <article id={`member-${encodeURIComponent(m.name)}`} key={`${m.name}-${i}`} className="card member-profile">
                 <header className="member-profile-head">
                   <span className="member-number" aria-hidden="true">
                     {i + 1}
@@ -243,5 +244,145 @@ function AuraCard({
         )}
       </div>
     </div>
+  )
+}
+
+export function parseAuraScore(raw?: string): number {
+  if (!raw) return 0
+  const clean = raw.replace(/[,\s]/g, '').toLowerCase()
+  if (clean.includes('infinity') || clean.includes('אינסוף')) return 999999
+  const match = clean.match(/[-+]?\d+/)
+  return match ? parseInt(match[0], 10) : 0
+}
+
+function AuraPodium({
+  members,
+  t,
+}: {
+  members: GroupReport['members']
+  lang: string
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  const withAura = members.filter((m) => m.aura && m.aura.score)
+  if (withAura.length < 2) return null
+
+  const sorted = [...withAura].sort((a, b) => parseAuraScore(b.aura?.score) - parseAuraScore(a.aura?.score))
+  const first = sorted[0]
+  const second = sorted[1]
+  const third = sorted[2]
+
+  const lowest = sorted[sorted.length - 1]
+  const hasDebtor = lowest && lowest !== first && lowest !== second && parseAuraScore(lowest.aura?.score) < 0
+
+  const scrollToMember = (name: string) => {
+    const el = document.getElementById(`member-${encodeURIComponent(name)}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('highlight-glow')
+      setTimeout(() => el.classList.remove('highlight-glow'), 2000)
+    }
+  }
+
+  return (
+    <section className="card aura-podium-card" aria-label={t.report.auraPodiumTitle}>
+      <header className="aura-podium-header">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="aura-trophy" aria-hidden="true">
+            🏆
+          </span>
+          <div>
+            <h3 className="report-h3" style={{ margin: 0, fontSize: '1.2rem' }}>
+              {t.report.auraPodiumTitle}
+            </h3>
+            <p className="small muted" style={{ margin: 0 }}>
+              {t.report.auraPodiumSub}
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="podium-grid">
+        {/* 2nd Place */}
+        {second && (
+          <div
+            className="podium-col podium-2"
+            onClick={() => scrollToMember(second.name)}
+            role="button"
+            tabIndex={0}
+            title={second.name}
+          >
+            <div className="podium-avatar">🥈</div>
+            <span className="podium-name">{second.name}</span>
+            <span className="podium-score">{second.aura?.score}</span>
+            <div className="podium-pillar pillar-2">
+              <span className="podium-rank">2</span>
+            </div>
+          </div>
+        )}
+
+        {/* 1st Place (Center) */}
+        {first && (
+          <div
+            className="podium-col podium-1"
+            onClick={() => scrollToMember(first.name)}
+            role="button"
+            tabIndex={0}
+            title={first.name}
+          >
+            <span className="podium-crown" aria-hidden="true">
+              👑
+            </span>
+            <div className="podium-avatar">🥇</div>
+            <strong className="podium-name">{first.name}</strong>
+            <span className="podium-badge-champ">{t.report.auraChampion}</span>
+            <span className="podium-score podium-score-gold">{first.aura?.score}</span>
+            <div className="podium-pillar pillar-1">
+              <span className="podium-rank">1</span>
+            </div>
+          </div>
+        )}
+
+        {/* 3rd Place */}
+        {third && (
+          <div
+            className="podium-col podium-3"
+            onClick={() => scrollToMember(third.name)}
+            role="button"
+            tabIndex={0}
+            title={third.name}
+          >
+            <div className="podium-avatar">🥉</div>
+            <span className="podium-name">{third.name}</span>
+            <span className="podium-score">{third.aura?.score}</span>
+            <div className="podium-pillar pillar-3">
+              <span className="podium-rank">3</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {hasDebtor && (
+        <div
+          className="podium-debtor-row"
+          onClick={() => scrollToMember(lowest.name)}
+          role="button"
+          tabIndex={0}
+          title={lowest.name}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span aria-hidden="true">💀</span>
+            <div>
+              <strong style={{ fontSize: '0.9rem' }}>
+                {t.report.auraDebtor}: {lowest.name}
+              </strong>
+              <div className="small" style={{ opacity: 0.85 }}>
+                {lowest.aura?.status || 'Aura Bankruptcy'}
+              </div>
+            </div>
+          </div>
+          <span className="aura-badge-minus">{lowest.aura?.score}</span>
+        </div>
+      )}
+    </section>
   )
 }

@@ -198,6 +198,10 @@ export const translations = {
       auraLoss: 'Aura Drop',
       auraLossHere: 'Dropped {points} Aura here:',
       auraGainHere: 'Gained {points} Aura here:',
+      auraPodiumTitle: 'The Aura Podium',
+      auraPodiumSub: 'Who rules the chat and who is in severe aura debt',
+      auraChampion: 'Aura Boss',
+      auraDebtor: 'Aura Bankruptcy',
     },
     hub: {
       newReportOnChat: 'New report on this chat',
@@ -433,6 +437,10 @@ export const translations = {
       auraLoss: 'איבוד אורה',
       auraLossHere: 'כאן לדוגמא ירד לו {points} אורה:',
       auraGainHere: 'כאן קיבל {points} אורה:',
+      auraPodiumTitle: 'פודיום האורה של הקבוצה',
+      auraPodiumSub: 'מי שולט בשיחה ומי שקוע בחובות אורה כבדים',
+      auraChampion: 'מלך האורה',
+      auraDebtor: 'פושט הרגל של האורה',
     },
     hub: {
       newReportOnChat: 'דוח חדש על שיחה זו',
