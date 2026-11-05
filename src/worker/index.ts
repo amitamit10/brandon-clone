@@ -6,6 +6,7 @@ import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSecon
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
 import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor, visitorSecret } from './usage'
 import { cleanOneLine } from '../pipeline/safety'
+import { createAdminApp } from './admin'
 
 export interface Env {
   DB: D1Database
@@ -284,6 +285,8 @@ export function createApp(deps: AppDeps = {}) {
     if (!chat) throw notFound()
     return c.json({ groupName: chat.name, persona: report.persona, language: report.language, content: report.content })
   })
+
+  app.route('/api/admin', createAdminApp({ now }))
 
   return app
 }
