@@ -21,8 +21,26 @@ const MAX_NAME_CHARS = 80
 const MIN_TOTAL_MESSAGES = 30
 const DATE_RE = /^(\d{4}-\d{2}-\d{2})?$/
 
+/** Limit on the uploader's self-declared name, in characters after cleaning. */
+export const MAX_UPLOADER_NAME_CHARS = 60
+
+/**
+ * Cleans the uploader's self-declared name: whitespace runs become one space, control and bidi/format
+ * characters are removed, and the ends are trimmed. Returns null when nothing is left or the input is not a string.
+ */
+export function cleanUploaderName(x: unknown): string | null {
+  if (typeof x !== 'string') return null
+  const cleaned = x
+    .replace(/\s+/gu, ' ')
+    .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return cleaned.length > 0 ? cleaned : null
+}
+
 export interface ValidUpload {
   name: string
+  uploaderName: string
   participants: string[]
   stats: ChatStats
   chunks: Chunk[]
@@ -119,6 +137,8 @@ export function validateUpload(input: unknown): ValidUpload {
   const body = record(input)
   const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (name.length < 1 || name.length > MAX_NAME_CHARS) throw bad()
+  const uploaderName = cleanUploaderName(body.uploaderName)
+  if (uploaderName === null || Array.from(uploaderName).length > MAX_UPLOADER_NAME_CHARS) throw bad()
 
   const participants = list(body.participants, 1, MAX_PARTICIPANTS).map((p) => str(p, 1, MAX_NAME_CHARS))
   const participantSet = new Set(participants)
@@ -136,5 +156,5 @@ export function validateUpload(input: unknown): ValidUpload {
 
   const stats = chatStats(body.stats, participantSet)
   if (participants.length < 2 || stats.total < MIN_TOTAL_MESSAGES) throw new ApiError(422, 'too_small')
-  return { name, participants, stats, chunks }
+  return { name, uploaderName, participants, stats, chunks }
 }

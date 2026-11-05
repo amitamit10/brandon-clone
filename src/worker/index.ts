@@ -148,6 +148,7 @@ export function createApp(deps: AppDeps = {}) {
     const up = validateUpload(parseJson(await readBounded(c.req.raw, MAX_UPLOAD_BYTES)))
     const chatId = await createDb(c.env.DB, now).insertChat({
       name: up.name,
+      uploaderName: up.uploaderName,
       participants: up.participants,
       stats: up.stats,
       chunks: up.chunks,
