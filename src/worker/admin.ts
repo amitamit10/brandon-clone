@@ -9,6 +9,8 @@ import type { Env } from './index'
 import { createDb } from './db'
 import { checkRateLimit, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { bump, dayOf, quietly } from './usage'
+import { readBounded } from './body'
+import { ApiError } from './validate'
 
 const SESSION = 'admin_session'
 const SESSION_MS = 12 * 60 * 60 * 1000
@@ -83,14 +85,10 @@ async function sessionValid(token: string, value: string | undefined, now: numbe
   }
 }
 
-/** Reads {"token": "..."} from a body of at most LOGIN_BODY_MAX bytes. Anything else is null. */
-async function readToken(c: Context<{ Bindings: Env }>): Promise<string | null> {
-  const declared = c.req.header('content-length')
-  if (declared !== undefined && Number(declared) > LOGIN_BODY_MAX) return null
-  const text = await c.req.text()
-  if (text.length > LOGIN_BODY_MAX) return null
+/** Reads {"token": "..."} from the first LOGIN_BODY_MAX bytes. Anything else, or too large a body, gives null. */
+function parseToken(raw: Uint8Array): string | null {
   try {
-    const body = JSON.parse(text) as { token?: unknown }
+    const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw)) as { token?: unknown }
     return typeof body.token === 'string' && body.token.length <= 200 ? body.token : null
   } catch {
     return null
@@ -194,7 +192,15 @@ export function createAdminApp(deps: AdminDeps = {}) {
       c.header('Retry-After', String(retryAfterSeconds(now())))
       return c.json({ error: 'rate_limited' }, 429)
     }
-    const token = await readToken(c)
+    // The body is read with a hard cap before anything is compared. Over the cap nothing is checked.
+    let raw: Uint8Array
+    try {
+      raw = await readBounded(c.req.raw, LOGIN_BODY_MAX)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 413) return c.json({ error: 'too_large' }, 413)
+      throw err
+    }
+    const token = parseToken(raw)
     const matches = token !== null && (await tokenMatches(token, c.env.ADMIN_TOKEN as string))
     if (!matches) {
       await quietly(() => bump(c.env.DB, dayOf(now()), 'admin_login_failed', 'all'))

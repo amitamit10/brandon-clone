@@ -7,6 +7,7 @@ import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
 import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor, visitorSecret } from './usage'
 import { cleanOneLine } from '../pipeline/safety'
 import { createAdminApp } from './admin'
+import { readBounded } from './body'
 
 export interface Env {
   DB: D1Database
@@ -41,36 +42,6 @@ const QUESTION_MAX = 500
 
 const isId = (s: string) => HEX32.test(s)
 const notFound = () => new ApiError(404, 'not_found')
-
-/**
- * Reads the body up to max bytes. The declared content-length is checked first, then the bytes
- * actually received, so a missing or false header cannot bypass the cap.
- */
-async function readBounded(req: Request, max: number): Promise<Uint8Array> {
-  const declared = req.headers.get('content-length')
-  if (declared !== null && Number(declared) > max) throw new ApiError(413, 'too_large')
-  if (!req.body) return new Uint8Array(0)
-  const reader = req.body.getReader()
-  const parts: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > max) {
-      await reader.cancel()
-      throw new ApiError(413, 'too_large')
-    }
-    parts.push(value)
-  }
-  const out = new Uint8Array(size)
-  let offset = 0
-  for (const part of parts) {
-    out.set(part, offset)
-    offset += part.byteLength
-  }
-  return out
-}
 
 /** Decodes strict UTF-8 and parses JSON. Any failure is a 400 bad_request. */
 function parseJson(bytes: Uint8Array): unknown {

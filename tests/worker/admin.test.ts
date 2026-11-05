@@ -164,6 +164,36 @@ describe('login and sessions', () => {
     expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0)
   })
 
+  it('answers 413 to a chunked login body over the cap without reading all of it', async () => {
+    const app = createApp()
+    let pulled = 0
+    const chunk = new TextEncoder().encode('x'.repeat(64))
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= 200) return controller.close()
+        pulled++
+        controller.enqueue(chunk)
+      },
+    })
+    const req = new Request(`${BASE}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'CF-Connecting-IP': randomId(), 'content-type': 'application/json', 'X-Admin': '1' },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit)
+    expect(req.headers.get('content-length')).toBeNull()
+    const res = await Promise.resolve(app.request(req, undefined, ENV))
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: 'too_large' })
+    expect(pulled).toBeLessThan(200)
+  })
+
+  it('still logs in with a normal body after the cap check', async () => {
+    const app = createApp()
+    const res = await call(app, 'POST', '/api/admin/login', { json: { token: TOKEN } })
+    expect(res.status).toBe(200)
+  })
+
   it('rejects a tampered cookie and an expired one', async () => {
     const now = Date.now()
     const app = createApp({ now: () => now })
