@@ -4,17 +4,20 @@ import { Mascot } from '../components/Mascot'
 import { RingCluster } from '../components/RingCluster'
 import { ChatMarquee } from '../components/ChatMarquee'
 import { PrivacyNote } from '../components/PrivacyNote'
+import { LanguageToggle } from '../components/LanguageToggle'
 import { DEMO_CHATS, type DemoChat } from '../lib/demo'
 import { PERSONA_NAMES } from '../lib/personas'
-
-const HOW_IT_WORKS = [
-  { title: 'Export', body: 'In WhatsApp, export the group chat without media. It takes a minute.' },
-  { title: 'Upload', body: 'Drop the .zip or .txt here. It is read in your browser first.' },
-  { title: 'Read', body: 'Brandon writes the report. Every quote is checked against the chat.' },
-]
+import { useI18n } from '../lib/i18n'
 
 export function Landing() {
   const [picked, setPicked] = useState<DemoChat | null>(null)
+  const { t, isRTL } = useI18n()
+
+  const howItWorks = [
+    { title: t.landing.step1Title, body: t.landing.step1Body },
+    { title: t.landing.step2Title, body: t.landing.step2Body },
+    { title: t.landing.step3Title, body: t.landing.step3Body },
+  ]
 
   return (
     <>
@@ -23,11 +26,12 @@ export function Landing() {
           <Mascot persona="brandon" size={32} />
           <span className="wordmark">Brandon Clone</span>
           <span className="topbar-spacer" />
+          <LanguageToggle />
           <Link className="small" style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }} to="/history">
-            My chats
+            {t.nav.myChats}
           </Link>
           <Link className="btn" style={{ minHeight: 44, padding: '0 16px' }} to="/setup">
-            Try it now →
+            {t.nav.tryNow}
           </Link>
         </div>
       </header>
@@ -35,12 +39,10 @@ export function Landing() {
       <main className="wrap">
         <section className="hero" aria-labelledby="hero-heading">
           <RingCluster />
-          <h1 id="hero-heading">Upload a group chat. Brandon tells you what's really going on.</h1>
-          <p className="hero-sub">
-            Export a WhatsApp group, drop it here, and get a blunt, specific report on everyone in it.
-          </p>
+          <h1 id="hero-heading">{t.landing.heroHeading}</h1>
+          <p className="hero-sub">{t.landing.heroSub}</p>
           <Link className="btn btn-block" to="/setup">
-            Upload your chat →
+            {t.landing.uploadCta}
           </Link>
         </section>
 
@@ -48,18 +50,18 @@ export function Landing() {
 
         <section className="demo-area" aria-labelledby="demo-heading">
           <h2 id="demo-heading" className="step-title" style={{ fontSize: '1.3rem' }}>
-            Tap a chat to see a demo
+            {t.landing.demoTitle}
           </h2>
           <div className="card" style={{ marginTop: 12 }} aria-live="polite">
-            {picked ? <DemoReport chat={picked} /> : <p className="muted">Pick a chat above. The example is made up.</p>}
+            {picked ? <DemoReport chat={picked} /> : <p className="muted">{t.landing.demoSub}</p>}
           </div>
         </section>
 
         <section className="steps-strip" aria-labelledby="how-heading">
           <h2 id="how-heading" className="step-title" style={{ fontSize: '1.3rem' }}>
-            How it works
+            {t.landing.howTitle}
           </h2>
-          {HOW_IT_WORKS.map((step, i) => (
+          {howItWorks.map((step, i) => (
             <div key={step.title} className="card step-chip">
               <span className="step-num" aria-hidden="true">
                 {i + 1}
@@ -75,7 +77,7 @@ export function Landing() {
         <footer className="site-footer">
           <PrivacyNote />
           <p className="small" style={{ marginTop: 8 }}>
-            {DEMO_CHATS.length} example chats, all made up.
+            {DEMO_CHATS.length} {isRTL ? 'שיחות לדוגמה, כולן מומצאות.' : 'example chats, all made up.'}
           </p>
         </footer>
       </main>

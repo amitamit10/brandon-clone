@@ -12,6 +12,8 @@ import { apiErrorMessage } from '../lib/messages'
 import { PERSONA_NAMES } from '../lib/personas'
 import { sessionFor, type ChatSession } from '../lib/session'
 import { useReportJob, type ReportJob } from '../lib/useReportJob'
+import { useI18n } from '../lib/i18n'
+import { LanguageToggle } from '../components/LanguageToggle'
 
 /**
  * The report route. Keyed by chat and report, so a retry (a new report id) starts a fresh flow.
@@ -24,6 +26,7 @@ export function Report() {
 }
 
 function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) {
+  const { t, lang } = useI18n()
   const [session] = useState<ChatSession | null>(() => sessionFor(chatId))
   const [history] = useState(() => settingsForChat(chatId))
   const [searchParams, setSearchParams] = useSearchParams()
@@ -48,13 +51,14 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
   const header = (
     <header className="topbar">
       <div className="topbar-inner">
-        <Link to={`/c/${encodeURIComponent(chatId)}`} className="icon-btn" aria-label="Back to chat">
+        <Link to={`/c/${encodeURIComponent(chatId)}`} className="icon-btn" aria-label={t.report.backToChat}>
           ←
         </Link>
         <span className="wordmark">Brandon Clone</span>
         <span className="topbar-spacer" />
-        <Link to="/setup" className="small">
-          New chat
+        <LanguageToggle />
+        <Link to="/setup" className="small" style={{ marginInlineStart: 12 }}>
+          {t.report.newChat}
         </Link>
       </div>
     </header>
@@ -201,6 +205,7 @@ function Story({
   onStep: (n: number) => void
   onFinish: () => void
 }) {
+  const { t, lang } = useI18n()
   const last = step === STORY_COUNT
   return (
     <main className="story-page">
@@ -210,7 +215,7 @@ function Story({
           className="icon-btn"
           onClick={() => onStep(step - 1)}
           disabled={step === 1}
-          aria-label="Previous card"
+          aria-label={t.story.previousCard}
         >
           ←
         </button>
@@ -218,7 +223,7 @@ function Story({
           <span style={{ width: `${(step / STORY_COUNT) * 100}%` }} />
         </div>
         <span className="small muted" aria-live="polite">
-          {step} of {STORY_COUNT}
+          {lang === 'he' ? `${step} מתוך ${STORY_COUNT}` : `${step} of ${STORY_COUNT}`}
         </span>
       </div>
       <div key={step} className="step-enter story-body">
@@ -226,7 +231,7 @@ function Story({
       </div>
       <div className="story-footer">
         <button type="button" className="btn btn-dark btn-block" onClick={() => (last ? onFinish() : onStep(step + 1))}>
-          {last ? 'See the report' : 'Continue'}
+          {last ? (lang === 'he' ? t.story.seeTheReport : 'See the report') : (lang === 'he' ? t.story.continue : 'Continue')}
         </button>
       </div>
     </main>
@@ -245,6 +250,7 @@ function FailedScreen({
   view: ReportRecord | null
 }) {
   const navigate = useNavigate()
+  const { t, lang } = useI18n()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const message =
@@ -278,17 +284,17 @@ function FailedScreen({
 
   return (
     <main className="wrap report-main stack" style={{ gap: 16, textAlign: 'center', paddingTop: 48 }}>
-      <h1 className="report-h2">Report stopped</h1>
+      <h1 className="report-h2">{t.report.reportStopped}</h1>
       <p role="alert" className="muted">
         {message}
       </p>
       {settings ? (
         <button type="button" className="btn btn-block" onClick={retry} disabled={busy}>
-          {busy ? 'Starting again…' : 'Try again'}
+          {busy ? (lang === 'he' ? t.report.startingAgain : 'Starting again…') : (lang === 'he' ? t.report.tryAgain : 'Try again')}
         </button>
       ) : (
         <Link to={`/c/${encodeURIComponent(chatId)}`} className="btn btn-ghost">
-          Back to the chat
+          {lang === 'he' ? t.report.backToChat : 'Back to the chat'}
         </Link>
       )}
       {error && (

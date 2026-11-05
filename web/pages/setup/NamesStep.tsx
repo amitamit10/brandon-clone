@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { LetterAvatar } from '../../components/LetterAvatar'
 import { pastelFor } from '../../lib/palette'
+import { useI18n } from '../../lib/i18n'
 
 export interface NamesStepProps {
   participants: string[]
@@ -8,11 +9,12 @@ export interface NamesStepProps {
 }
 
 export function NamesStep({ participants, onRename }: NamesStepProps) {
+  const { t } = useI18n()
   return (
     <div className="stack">
       <div>
-        <h1 className="step-title">Clean up the names</h1>
-        <p className="step-sub">Replace nicknames and emojis with simple first names, so Brandon knows who's who.</p>
+        <h1 className="step-title">{t.setup.cleanNamesTitle}</h1>
+        <p className="step-sub">{t.setup.cleanNamesSub}</p>
       </div>
 
       <div className="card stack" style={{ gap: 4 }}>
@@ -22,7 +24,7 @@ export function NamesStep({ participants, onRename }: NamesStepProps) {
       </div>
 
       <p className="small muted">
-        If two people end up with the same name, they are merged automatically.
+        {t.setup.namesAutoMerged}
       </p>
     </div>
   )
@@ -37,6 +39,7 @@ function NameRow({
   colour: string
   onRename: (from: string, to: string) => void
 }) {
+  const { t, lang } = useI18n()
   const [draft, setDraft] = useState(name)
   const [invalid, setInvalid] = useState(false)
   const [shakeKey, setShakeKey] = useState(0)
@@ -53,6 +56,8 @@ function NameRow({
     if (next !== name) onRename(name, next)
   }
 
+  const label = lang === 'en' ? `Name for ${name}` : t.setup.nameFor.replace('{name}', name)
+
   return (
     <div style={{ display: 'grid', gap: 4, padding: '8px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -60,7 +65,7 @@ function NameRow({
         <input
           key={shakeKey}
           className={`field${invalid ? ' shake' : ''}`}
-          aria-label={`Name for ${name}`}
+          aria-label={label}
           aria-invalid={invalid}
           value={draft}
           maxLength={40}
@@ -74,7 +79,7 @@ function NameRow({
           }}
         />
       </div>
-      {invalid && <p className="field-error">A name can't be empty.</p>}
+      {invalid && <p className="field-error">{t.setup.nameCantBeEmpty}</p>}
     </div>
   )
 }

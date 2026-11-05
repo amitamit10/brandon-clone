@@ -40,8 +40,8 @@ const MAX_VERIFIED_QUOTES = 200
 
 const REPORT_REQUIREMENTS = [
   'Requirements:',
-  '- Write at least 5 sections. The first is the stats section. Others can be: the group dynamic, running jokes and bits, best moments, awards or superlatives, and the week things changed. Each section body has at least 4 sentences.',
-  '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript.',
+  '- Write at least 5 sections. Focus on entertaining thematic chapters (e.g. funny group habits, money/coupons, running jokes and bits, drama, best moments, awards or superlatives, and the week things changed). Do not output a dry stats listing; weave narrative stories. Each section body has at least 4 sentences.',
+  '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript. Each quote must be on its own line with a blank line before and after, like:\n\n> verbatim quote\n',
   '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences, specific to that person. quote is ONE line copied verbatim from the supplied quotes or transcript that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
 ].join('\n')
 
@@ -259,8 +259,16 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
     let start = 0
     while (start < raw.length && (raw[start] === '>' || raw[start] === ' ' || raw[start] === '\t')) start++
     const clean = cleanOneLine(unwrap(raw.slice(start).trim()), MAX_SHORT_CHARS)
-    const n = normalise(clean)
+    let n = normalise(clean)
     if (n.length < MIN_QUOTE_CHARS) return undefined
+
+    // If sender was included as a prefix (e.g. "Dana: hello" or "Dana - hello"), strip it
+    if (sender !== undefined) {
+      const sPrefix = normalise(sender)
+      if (n.startsWith(`${sPrefix}:`)) n = n.slice(sPrefix.length + 1).trim()
+      else if (n.startsWith(`${sPrefix} -`)) n = n.slice(sPrefix.length + 2).trim()
+    }
+
     const hay = sender === undefined ? hayAll : haySender.get(sender)
     return hay !== undefined && hay.includes(n) ? clean : undefined
   }
@@ -269,8 +277,11 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
   const cleanBody = (body: string): string => {
     const out: string[] = []
     let needBlank = false
-    // Markdown treats \r\n and a lone \r as line breaks, so normalise before splitting.
-    for (const line of body.replace(/\r\n?/g, '\n').split('\n')) {
+    // If quotes are embedded inline like "text. > quote", split them onto new lines
+    const normalizedBody = body
+      .replace(/\r\n?/g, '\n')
+      .replace(/([^\n])\s*>\s+/g, '$1\n> ')
+    for (const line of normalizedBody.split('\n')) {
       const qEnd = quotePrefixEnd(line)
       if (qEnd >= 0) {
         const q = keptQuotes < MAX_VERIFIED_QUOTES ? verified(line.slice(qEnd)) : undefined

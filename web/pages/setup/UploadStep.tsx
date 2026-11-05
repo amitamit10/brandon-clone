@@ -3,6 +3,7 @@ import { analyzeFile, type Analyzed } from '../../lib/analyze'
 import { uploadErrorMessage } from '../../lib/messages'
 import { PrivacyNote } from '../../components/PrivacyNote'
 import { TutorialModal } from '../../components/TutorialModal'
+import { useI18n, type Lang, type translations } from '../../lib/i18n'
 
 export interface UploadStepProps {
   analysed: Analyzed | null
@@ -12,13 +13,19 @@ export interface UploadStepProps {
   onUploaderName: (name: string) => void
 }
 
-export function qualityLabel(messageCount: number): string {
+export function qualityLabel(messageCount: number, t?: (typeof translations)[Lang]): string {
+  if (t) {
+    if (messageCount >= 5000) return t.setup.qualityExcellentSignal
+    if (messageCount >= 500) return t.setup.qualityGoodSignal
+    return t.setup.qualityThin
+  }
   if (messageCount >= 5000) return 'Excellent signal'
   if (messageCount >= 500) return 'Good signal'
   return 'Thin'
 }
 
 export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUploaderName }: UploadStepProps) {
+  const { t, lang } = useI18n()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errorKey, setErrorKey] = useState(0)
@@ -67,12 +74,12 @@ export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUpl
   return (
     <div className="stack">
       <div>
-        <h1 className="step-title">Upload your chat</h1>
-        <p className="step-sub">Export a WhatsApp group chat without media, then add the .zip or .txt here.</p>
+        <h1 className="step-title">{t.setup.uploadTitle}</h1>
+        <p className="step-sub">{t.setup.uploadSub}</p>
       </div>
 
       <label className="stack" style={{ gap: 6 }}>
-        <span style={{ fontWeight: 700 }}>Your name</span>
+        <span style={{ fontWeight: 700 }}>{t.setup.yourName}</span>
         <input
           className="field"
           type="text"
@@ -80,7 +87,7 @@ export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUpl
           autoComplete="name"
           value={uploaderName}
           onChange={(e) => onUploaderName(e.target.value)}
-          placeholder="Your name"
+          placeholder={t.setup.yourNamePlaceholder}
         />
       </label>
 
@@ -93,11 +100,11 @@ export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUpl
           <span className="big-count" aria-label={`${analysed.messageCount} messages`}>
             {analysed.messageCount.toLocaleString('en-US')}
           </span>
-          <span>messages</span>
-          <span className="quality">{qualityLabel(analysed.messageCount)}</span>
-          <span className="small">Click to change the conversation</span>
+          <span>{lang === 'he' ? 'הודעות' : 'messages'}</span>
+          <span className="quality">{qualityLabel(analysed.messageCount, t)}</span>
+          <span className="small">{t.setup.clickChangeConversation}</span>
           <span className="small" style={{ opacity: 0.8 }}>
-            Was this exported without media? WhatsApp includes less history when media is attached.
+            {t.setup.exportedWithoutMediaHint}
           </span>
         </label>
       ) : (
@@ -109,10 +116,10 @@ export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUpl
         >
           {fileInput}
           <ZipIcon />
-          <strong style={{ fontSize: '1.1rem' }}>Click to upload</strong>
-          <span className="muted">or drag and drop</span>
+          <strong style={{ fontSize: '1.1rem' }}>{t.setup.clickToUpload}</strong>
+          <span className="muted">{t.setup.orDragDrop}</span>
           <span className={`small muted${busy ? ' pulse' : ''}`} role="status">
-            {busy ? 'Reading your chat…' : '.zip or .txt, up to 10 MB'}
+            {busy ? t.setup.readingYourChat : t.setup.zipOrTxt}
           </span>
         </label>
       )}
@@ -124,7 +131,7 @@ export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUpl
       )}
 
       <button type="button" className="tutorial-row" onClick={() => setTutorialOpen(true)}>
-        See the tutorial
+        {t.setup.seeTutorial}
         <span aria-hidden="true">›</span>
       </button>
 

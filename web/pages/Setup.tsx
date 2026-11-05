@@ -4,6 +4,8 @@ import type { PersonaId } from '../../src/shared/types'
 import { applyNameMap, renameParticipant } from '../lib/nameMap'
 import { isValidName, loadUploaderName } from '../lib/uploaderName'
 import { reanalyze, type Analyzed } from '../lib/analyze'
+import { useI18n, getInitialLang } from '../lib/i18n'
+import { LanguageToggle } from '../components/LanguageToggle'
 import { UploadStep } from './setup/UploadStep'
 import { MembersStep } from './setup/MembersStep'
 import { NamesStep } from './setup/NamesStep'
@@ -18,6 +20,7 @@ const TOTAL_STEPS = 5
  */
 export function Setup() {
   const navigate = useNavigate()
+  const { t, lang } = useI18n()
   const [step, setStep] = useState(1)
   const [original, setOriginal] = useState<Analyzed | null>(null)
   const [fileName, setFileName] = useState('')
@@ -25,7 +28,7 @@ export function Setup() {
   const [names, setNames] = useState<Map<string, string>>(() => new Map())
   const [me, setMe] = useState<string | null>(null)
   const [persona, setPersona] = useState<PersonaId>('brandon')
-  const [language, setLanguage] = useState<string | null>('English')
+  const [language, setLanguage] = useState<string | null>(() => (getInitialLang() === 'he' ? 'Hebrew' : 'English'))
   const [uploaderName, setUploaderName] = useState<string>(() => loadUploaderName())
 
   // Stats and chunks follow the renames, so merged people are counted together.
@@ -70,14 +73,15 @@ export function Setup() {
     <>
       <header className="topbar">
         <div className="topbar-inner" style={{ flexWrap: 'wrap', paddingBottom: 10 }}>
-          <button type="button" className="icon-btn" onClick={back} aria-label="Back">
+          <button type="button" className="icon-btn" onClick={back} aria-label={t.nav.back}>
             ←
           </button>
           <span className="topbar-spacer" />
-          <span className="small muted" aria-live="polite">
-            {step} of {TOTAL_STEPS}
+          <LanguageToggle />
+          <span className="small muted" aria-live="polite" style={{ marginInlineStart: 10 }}>
+            {t.setup.stepOf.replace('{step}', String(step)).replace('{total}', String(TOTAL_STEPS))}
           </span>
-          <div className="progress" style={{ width: '100%' }} role="progressbar" aria-label="Setup progress" aria-valuemin={1} aria-valuemax={TOTAL_STEPS} aria-valuenow={step}>
+          <div className="progress" style={{ width: '100%', marginTop: 8 }} role="progressbar" aria-label="Setup progress" aria-valuemin={1} aria-valuemax={TOTAL_STEPS} aria-valuenow={step}>
             <span style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
           </div>
         </div>
@@ -137,7 +141,7 @@ export function Setup() {
             disabled={!canContinue}
             onClick={() => setStep(step + 1)}
           >
-            {step === 2 && groupName.trim().length === 0 ? 'Name the group to continue' : 'Continue'}
+            {step === 2 && groupName.trim().length === 0 ? t.setup.nameGroupToContinue : t.setup.continue}
           </button>
         </div>
       )}

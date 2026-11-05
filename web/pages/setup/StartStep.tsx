@@ -8,8 +8,8 @@ import { apiErrorMessage } from '../../lib/messages'
 import { PERSONA_NAMES } from '../../lib/personas'
 import { setSession } from '../../lib/session'
 import { computeExtras } from '../../../src/stats/extras'
-import { PRIVACY_TEXT } from '../../components/PrivacyNote'
 import { cleanName, saveUploaderName } from '../../lib/uploaderName'
+import { useI18n } from '../../lib/i18n'
 
 export interface StartStepProps {
   groupName: string
@@ -22,12 +22,17 @@ export interface StartStepProps {
 
 export function StartStep({ groupName, analysed, me, persona, language, uploaderName }: StartStepProps) {
   const navigate = useNavigate()
+  const { t, lang } = useI18n()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Kept across retries so a failed report call does not upload the chat a second time.
   const savedChatId = useRef<string | null>(null)
   const name = groupName.trim()
   const ready = name.length > 0 && me !== null && language !== null
+
+  const personaName = lang === 'he'
+    ? (persona === 'brandon' ? t.personas.brandonName : persona === 'clara' ? t.personas.claraName : t.personas.diegoName)
+    : PERSONA_NAMES[persona]
 
   const start = async () => {
     if (!ready || me === null || language === null) return
@@ -72,17 +77,17 @@ export function StartStep({ groupName, analysed, me, persona, language, uploader
   return (
     <div className="stack">
       <div>
-        <h1 className="step-title">Ready when you are</h1>
-        <p className="step-sub">Check the details, then start the report.</p>
+        <h1 className="step-title">{t.setup.readyTitle}</h1>
+        <p className="step-sub">{t.setup.readySub}</p>
       </div>
 
       <section className="card stack" style={{ gap: 10 }} aria-label="Summary">
-        <SummaryRow label="Group" value={name || '—'} />
-        <SummaryRow label="Members" value={String(analysed.chat.participants.length)} />
-        <SummaryRow label="Messages" value={analysed.messageCount.toLocaleString('en-US')} />
-        <SummaryRow label="You are" value={me ?? '—'} />
-        <SummaryRow label="Persona" value={PERSONA_NAMES[persona]} />
-        <SummaryRow label="Language" value={language ?? '—'} />
+        <SummaryRow label={t.setup.summaryGroup} value={name || '—'} />
+        <SummaryRow label={t.setup.summaryMembers} value={String(analysed.chat.participants.length)} />
+        <SummaryRow label={t.setup.summaryMessages} value={analysed.messageCount.toLocaleString('en-US')} />
+        <SummaryRow label={t.setup.summaryYouAre} value={me ?? '—'} />
+        <SummaryRow label={t.setup.summaryPersona} value={personaName} />
+        <SummaryRow label={t.setup.summaryLanguage} value={language ?? '—'} />
       </section>
 
       {error && (
@@ -98,10 +103,10 @@ export function StartStep({ groupName, analysed, me, persona, language, uploader
         disabled={!ready || busy}
         onClick={start}
       >
-        {busy ? 'Creating your report…' : 'Create my report'}
+        {busy ? t.setup.creatingBtn : t.setup.createBtn}
       </button>
       <p className="small muted" style={{ textAlign: 'center' }}>
-        {PRIVACY_TEXT}
+        {t.common.privacyNotice}
       </p>
     </div>
   )
