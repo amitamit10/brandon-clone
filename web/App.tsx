@@ -1,7 +1,10 @@
 import { Route, Routes } from 'react-router-dom'
 import { Landing } from './pages/Landing'
 import { Setup } from './pages/Setup'
-import { ReportPlaceholder } from './pages/ReportPlaceholder'
+import { Hub } from './pages/Hub'
+import { Report } from './pages/Report'
+import { History } from './pages/History'
+import { Shared } from './pages/Shared'
 import { NotFound } from './pages/NotFound'
 
 export function AppRoutes() {
@@ -10,7 +13,10 @@ export function AppRoutes() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/setup" element={<Setup />} />
-        <Route path="/c/:chatId/reports/:reportId" element={<ReportPlaceholder />} />
+        <Route path="/history" element={<History />} />
+        <Route path="/c/:chatId" element={<Hub />} />
+        <Route path="/c/:chatId/reports/:reportId" element={<Report />} />
+        <Route path="/s/:shareId" element={<Shared />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

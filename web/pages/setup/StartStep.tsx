@@ -6,6 +6,8 @@ import { createReport, uploadChat } from '../../lib/api'
 import { addHistory } from '../../lib/history'
 import { apiErrorMessage } from '../../lib/messages'
 import { PERSONA_NAMES } from '../../lib/personas'
+import { setSession } from '../../lib/session'
+import { computeExtras } from '../../../src/stats/extras'
 
 export interface StartStepProps {
   groupName: string
@@ -40,8 +42,20 @@ export function StartStep({ groupName, analysed, me, persona, language }: StartS
         savedChatId.current = chatId
       }
       const reportId = await createReport(chatId, { persona, language, me, kind: 'group' })
-      // Ids and a name only. The chat text never leaves memory in the browser.
-      addHistory({ chatId, reportId, name, createdAt: Date.now() })
+      // Ids, names and the reader's settings only. The chat text stays in memory (session.ts).
+      addHistory({ chatId, reportId, name, createdAt: Date.now(), persona, language, me, kind: 'group' })
+      setSession({
+        chatId,
+        reportId,
+        groupName: name,
+        chat: analysed.chat,
+        stats: analysed.stats,
+        chunks: analysed.chunks,
+        extras: computeExtras(analysed.chat),
+        persona,
+        language,
+        me,
+      })
       navigate(`/c/${encodeURIComponent(chatId)}/reports/${encodeURIComponent(reportId)}`)
     } catch (e) {
       setError(apiErrorMessage(e))
