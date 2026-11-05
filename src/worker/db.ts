@@ -258,7 +258,7 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
       id: string,
       _maxFailures: number,
       leaseMs: number,
-    ): Promise<{ outcome: 'claimed'; failures: number } | { outcome: 'busy' } | { outcome: 'closed' } | null> {
+    ): Promise<{ outcome: 'claimed'; failures: number; token: number } | { outcome: 'busy' } | { outcome: 'closed' } | null> {
       const t = now()
       const row = await d1
         .prepare(
@@ -268,44 +268,45 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
         )
         .bind(t + leaseMs, id, t, t)
         .first<{ failures: number }>()
-      if (row) return { outcome: 'claimed', failures: row.failures }
+      // The fencing token is the lease expiry this claim wrote: a later claim can only happen after it passed.
+      if (row) return { outcome: 'claimed', failures: row.failures, token: t + leaseMs }
       const current = await this.getReport(id)
       if (!current) return null
       return current.status === 'done' || current.status === 'failed' ? { outcome: 'closed' } : { outcome: 'busy' }
     },
 
     /** A successful step: progress up, failure counter reset, lease released. Only while the report is open. */
-    async advanceProgress(id: string, p: { progress: number; total: number }): Promise<boolean> {
+    async advanceProgress(id: string, p: { progress: number; total: number }, token: number): Promise<boolean> {
       const res = await d1
         .prepare(
           "UPDATE reports SET progress = ?, total = ?, failures = 0, error = NULL, lease_until = NULL, status = 'running' " +
-            "WHERE id = ? AND status NOT IN ('done', 'failed')",
+            "WHERE id = ? AND status NOT IN ('done', 'failed') AND lease_until = ?",
         )
-        .bind(p.progress, p.total, id)
+        .bind(p.progress, p.total, id, token)
         .run()
       return res.meta.changes > 0
     },
 
     /** The final write. Only while the report is open, so a late call cannot overwrite a failed report. */
-    async finishReport(id: string, content: GroupReport, total: number): Promise<boolean> {
+    async finishReport(id: string, content: GroupReport, total: number, token: number): Promise<boolean> {
       const res = await d1
         .prepare(
           "UPDATE reports SET status = 'done', progress = ?, total = ?, content_json = ?, error = NULL, failures = 0, lease_until = NULL " +
-            "WHERE id = ? AND status NOT IN ('done', 'failed')",
+            "WHERE id = ? AND status NOT IN ('done', 'failed') AND lease_until = ?",
         )
-        .bind(total, total, JSON.stringify(content), id)
+        .bind(total, total, JSON.stringify(content), id, token)
         .run()
       return res.meta.changes > 0
     },
 
     /** Records a failed attempt (the attempt was already counted by claimAttempt) and releases the lease. */
-    async failAttempt(id: string, code: string, maxFailures: number): Promise<{ status: ReportStatus; progress: number } | null> {
+    async failAttempt(id: string, code: string, maxFailures: number, token: number): Promise<{ status: ReportStatus; progress: number } | null> {
       return d1
         .prepare(
           "UPDATE reports SET error = ?, lease_until = NULL, status = CASE WHEN failures >= ? THEN 'failed' ELSE 'running' END " +
-            "WHERE id = ? AND status NOT IN ('done', 'failed') RETURNING status, progress",
+            "WHERE id = ? AND status NOT IN ('done', 'failed') AND lease_until = ? RETURNING status, progress",
         )
-        .bind(code, maxFailures, id)
+        .bind(code, maxFailures, id, token)
         .first<{ status: ReportStatus; progress: number }>()
     },
 

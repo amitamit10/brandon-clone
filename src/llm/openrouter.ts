@@ -12,7 +12,7 @@ export class OpenRouterProvider implements LlmProvider {
   async generate(req: LlmRequest): Promise<{ text: string }> {
     const res = await globalThis.fetch(ENDPOINT, {
       method: 'POST',
-      signal: AbortSignal.timeout(LLM_SLOW_FETCH_TIMEOUT_MS),
+      signal: req.signal ? AbortSignal.any([AbortSignal.timeout(LLM_SLOW_FETCH_TIMEOUT_MS), req.signal]) : AbortSignal.timeout(LLM_SLOW_FETCH_TIMEOUT_MS),
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${this.apiKey}`,

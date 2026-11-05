@@ -3,6 +3,8 @@ export interface LlmRequest {
   prompt: string
   json?: boolean
   maxTokens?: number
+  /** Overall deadline for the whole call (all retries); adapters and the fallback honour it. */
+  signal?: AbortSignal
 }
 
 export interface LlmProvider {
@@ -57,6 +59,7 @@ export function createFallbackProvider(
       const rounds = 1 + opts.retries
       for (let round = 0; round < rounds; round++) {
         for (const provider of providers) {
+          if (req.signal?.aborted) throw new Error('llm_deadline')
           try {
             return await provider.generate(req)
           } catch (e) {
@@ -67,6 +70,7 @@ export function createFallbackProvider(
           const hinted = lastError instanceof RateLimitError ? lastError.retryAfterMs : undefined
           if (hinted !== undefined && hinted > MAX_RETRY_WAIT_MS) throw lastError
           await opts.sleep(hinted ?? BACKOFF_BASE_MS * 2 ** round)
+          if (req.signal?.aborted) throw new Error('llm_deadline')
         }
       }
       throw lastError

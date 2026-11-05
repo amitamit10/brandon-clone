@@ -34,6 +34,13 @@ const MAX_ASK_CHARS = 500
 const MIN_QUOTE_CHARS = 4
 const MAX_VERIFIED_QUOTES = 200
 
+const REPORT_REQUIREMENTS = [
+  'Requirements:',
+  '- Write at least 5 sections. The first is the stats section. Others can be: the group dynamic, running jokes and bits, best moments, awards or superlatives, and the week things changed. Each section body has at least 4 sentences.',
+  '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes.',
+  '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences, specific to that person. quote is ONE line copied verbatim from the supplied quotes that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+].join('\n')
+
 const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
   "runningJokes": string[],
@@ -131,6 +138,7 @@ function buildPrompt(a: ReportInput): string {
     'REQUEST DATA (JSON; "me" is the person who asked for this report):',
     fence(requestData),
     requestBlock(a),
+    REPORT_REQUIREMENTS,
     `Reply with ONLY JSON matching this shape:\n${REPORT_SCHEMA}`,
   ].join('\n\n')
 }
@@ -242,7 +250,10 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
   for (const [k, v] of bySender) haySender.set(k, v.join('\u0001'))
 
   const verified = (raw: string, sender?: string): string | undefined => {
-    const clean = cleanOneLine(unwrap(raw.trim()), MAX_SHORT_CHARS)
+    // Models often copy the blockquote marker into a member's quote field: strip it before checking.
+    let start = 0
+    while (start < raw.length && (raw[start] === '>' || raw[start] === ' ' || raw[start] === '\t')) start++
+    const clean = cleanOneLine(unwrap(raw.slice(start).trim()), MAX_SHORT_CHARS)
     const n = normalise(clean)
     if (n.length < MIN_QUOTE_CHARS) return undefined
     const hay = sender === undefined ? hayAll : haySender.get(sender)

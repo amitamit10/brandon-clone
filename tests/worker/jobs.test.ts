@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createDb } from '../../src/worker/db'
-import { advanceReport, MAX_FAILURES, RETRIEVED_MAX_CHARS, retrievedLines } from '../../src/worker/jobs'
+import { ADVANCE_DEADLINE_MS, advanceReport, LEASE_MS, MAX_FAILURES, RETRIEVED_MAX_CHARS, retrievedLines } from '../../src/worker/jobs'
 import type { Env } from '../../src/worker/index'
 import { applyMigrations, chatWith, fakeProvider, uploadBody } from './support'
 
@@ -75,10 +75,39 @@ describe('advanceReport claims and leases', () => {
   it('late writes cannot resurrect or overwrite a failed or done report', async () => {
     const now = () => 4_000_000
     const { db, reportId } = await setup(now)
+    const claim = await db.claimAttempt(reportId, MAX_FAILURES, 60_000)
+    const token = claim && claim.outcome === 'claimed' ? claim.token : -1
     await db.failReport(reportId, 'llm_error')
-    expect(await db.advanceProgress(reportId, { progress: 1, total: 3 })).toBe(false)
-    expect(await db.finishReport(reportId, { title: 'x' } as never, 3)).toBe(false)
+    expect(await db.advanceProgress(reportId, { progress: 1, total: 3 }, token)).toBe(false)
+    expect(await db.finishReport(reportId, { title: 'x' } as never, 3, token)).toBe(false)
     expect(await db.getReport(reportId)).toMatchObject({ status: 'failed' })
+  })
+
+  it('a stale lease holder cannot write after another attempt took the lease over (fencing token)', async () => {
+    let t = 5_000_000
+    const now = () => t
+    const { db, reportId } = await setup(now)
+    const a = await db.claimAttempt(reportId, MAX_FAILURES, 60_000)
+    expect(a).toMatchObject({ outcome: 'claimed' })
+    t += 61_000 // A's lease expires while A is still running
+    const b = await db.claimAttempt(reportId, MAX_FAILURES, 60_000)
+    expect(b).toMatchObject({ outcome: 'claimed' })
+    const tokenA = (a as { token: number }).token
+    const tokenB = (b as { token: number }).token
+    expect(tokenB).not.toBe(tokenA)
+    expect(await db.advanceProgress(reportId, { progress: 1, total: 3 }, tokenA)).toBe(false)
+    expect(await db.finishReport(reportId, { title: 'x' } as never, 3, tokenA)).toBe(false)
+    expect(await db.failAttempt(reportId, 'llm_error', MAX_FAILURES, tokenA)).toBeNull()
+    expect(await db.advanceProgress(reportId, { progress: 1, total: 3 }, tokenB)).toBe(true)
+  })
+
+  it('every model call carries an abort signal and the whole advance is bounded below the lease', async () => {
+    const now = () => 6_000_000
+    const { reportId } = await setup(now)
+    const provider = fakeProvider()
+    await advanceReport(E, reportId, { provider, now })
+    expect(provider.calls[0].signal).toBeInstanceOf(AbortSignal)
+    expect(ADVANCE_DEADLINE_MS).toBeLessThan(LEASE_MS)
   })
 })
 

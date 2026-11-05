@@ -46,6 +46,9 @@ const phaseOf = (status: ReportStatus, pendingSummaries: boolean): JobPhase => {
 /** How long one advance may hold a report. A crashed holder is retried after this. */
 export const LEASE_MS = 240_000
 
+/** The whole advance (every retry of every model) must end before the lease can expire. */
+export const ADVANCE_DEADLINE_MS = 200_000
+
 /** Chunks retrieved for a follow-up question. */
 export const RETRIEVE_K = 3
 /** Total characters of retrieved lines sent with a follow-up. */
@@ -114,7 +117,9 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   const summarized = rows.filter((r) => r.summary !== null).length
 
   // Throws no_llm_key_configured (mapped to 503 by the route). Not counted as a failure.
-  const provider = deps.provider ?? createProviderFromEnv(env)
+  const base = deps.provider ?? createProviderFromEnv(env, pending ? 'summary' : 'report')
+  const deadline = AbortSignal.timeout(ADVANCE_DEADLINE_MS)
+  const provider: LlmProvider = { name: base.name, generate: (req) => base.generate({ ...req, signal: req.signal ?? deadline }) }
 
   const claim = await db.claimAttempt(reportId, MAX_FAILURES, LEASE_MS)
   if (claim === null) return null
@@ -134,11 +139,14 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     try {
       summary = await summarizeChunk(provider, { index: pending.idx, fromId: 0, toId: 0, text: pending.text }, report.language)
     } catch (err) {
-      return recordFailure(db, reportId, err, { progress: summarized, total, pending: true })
+      return recordFailure(db, reportId, err, { progress: summarized, total, pending: true }, claim.token)
     }
     await db.saveSummary(report.chatId, pending.idx, summary)
     const progress = summarized + 1
-    await db.advanceProgress(reportId, { progress, total })
+    if (!(await db.advanceProgress(reportId, { progress, total }, claim.token))) {
+      const current = await db.getReport(reportId)
+      return current ? stateOf(current, true) : null
+    }
     return { status: 'running', phase: phaseOf('running', progress < total - 1), progress, total }
   }
 
@@ -161,7 +169,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
       retrieved,
     })
   } catch (err) {
-    return recordFailure(db, reportId, err, { progress: summarized, total, pending: false })
+    return recordFailure(db, reportId, err, { progress: summarized, total, pending: false }, claim.token)
   }
 
   const parsed: ParsedChat = {
@@ -175,7 +183,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     dateOrder: 'mdy',
   }
   const content = verifyQuotes(generated, parsed)
-  const written = await db.finishReport(reportId, content, total)
+  const written = await db.finishReport(reportId, content, total, claim.token)
   if (!written) {
     const current = await db.getReport(reportId)
     return current ? stateOf(current) : null
@@ -193,9 +201,10 @@ async function recordFailure(
   reportId: string,
   err: unknown,
   at: { progress: number; total: number; pending: boolean },
+  token: number,
 ): Promise<JobState> {
   const code = err instanceof RateLimitError ? 'rate_limited' : 'llm_error'
-  const after = await db.failAttempt(reportId, code, MAX_FAILURES)
+  const after = await db.failAttempt(reportId, code, MAX_FAILURES, token)
   const status: ReportStatus = after?.status ?? 'running'
   return { status, phase: phaseOf(status, at.pending), progress: at.progress, total: at.total, error: code }
 }

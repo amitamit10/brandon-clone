@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createProviderFromEnv, DEFAULT_GEMINI_MODELS } from '../../src/llm/index'
+import { createProviderFromEnv, DEFAULT_GEMINI_MODELS, REPORT_GEMINI_MODELS } from '../../src/llm/index'
 import type { Env } from '../../src/worker/index'
 
 const env = (over: Partial<Env>) => ({ DB: {} as D1Database, ASSETS: {} as Fetcher, ...over }) as Env
@@ -65,6 +65,21 @@ describe('createProviderFromEnv', () => {
     await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key' })).generate({ system: 's', prompt: 'p' })
     await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key', OPENROUTER_MODEL: 'vendor/other:free' })).generate({ system: 's', prompt: 'p' })
     expect(models).toEqual(['stealth/crouton-alpha', 'vendor/other:free'])
+  })
+
+  it('the report step tries the stronger Gemini models first, the summary step starts with the fast one', async () => {
+    const firstModel = async (purpose?: 'summary' | 'report') => {
+      const urls: string[] = []
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => (urls.push(url), geminiOk())))
+      await createProviderFromEnv(env({ GEMINI_API_KEY: 'g-key' }), purpose).generate({ system: 's', prompt: 'p' })
+      return urls[0]
+    }
+    expect(await firstModel('summary')).toContain(`/models/${DEFAULT_GEMINI_MODELS[0]}:`)
+    expect(await firstModel()).toContain(`/models/${DEFAULT_GEMINI_MODELS[0]}:`)
+    expect(await firstModel('report')).toContain(`/models/${REPORT_GEMINI_MODELS[0]}:`)
+    expect(REPORT_GEMINI_MODELS[0]).not.toBe(DEFAULT_GEMINI_MODELS[0])
+    expect(REPORT_GEMINI_MODELS.some((m) => m.includes('lite'))).toBe(true) // lite is only the last resort
+    expect(REPORT_GEMINI_MODELS.findIndex((m) => m.includes('lite'))).toBe(REPORT_GEMINI_MODELS.length - 1)
   })
 })
 

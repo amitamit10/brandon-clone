@@ -293,3 +293,33 @@ describe('review round 3: member allowlist, list-nested quotes, names inside the
   })
 })
 
+describe('real-data fixes: member quotes with a "> " prefix, and richer output requirements', () => {
+  const chat = mini([
+    { sender: 'Ana', text: 'good morning all everyone' },
+    { sender: 'Ben', text: 'totally different words here' },
+  ])
+
+  it('keeps a member quote the model wrote with a leading "> " and stores it without the prefix', () => {
+    const members = [
+      { name: 'Ana', nickname: 'n', opinion: 'o', quote: '> good morning all everyone' },
+      { name: 'Ben', nickname: 'n', opinion: 'o', quote: '>> "totally different words here"' },
+    ]
+    const out = verifyQuotes(withBody('x', members), chat)
+    expect(out.members.map((m) => m.quote)).toEqual(['good morning all everyone', 'totally different words here'])
+  })
+
+  it('still drops a prefixed member quote that the member did not say', () => {
+    const members = [{ name: 'Ana', nickname: 'n', opinion: 'o', quote: '> totally different words here' }]
+    expect(verifyQuotes(withBody('x', members), chat).members[0].quote).toBeUndefined()
+  })
+
+  it('the prompt asks for at least 5 sections, 3-5 sentence member opinions and quotes without a ">" prefix', async () => {
+    const { p, calls } = fake(JSON.stringify(validGroup))
+    await generateReport(p, { ...base, persona: 'brandon' })
+    const prompt = calls[0].prompt
+    expect(prompt).toMatch(/at least 5 sections/i)
+    expect(prompt).toMatch(/3 to 5 sentences/i)
+    expect(prompt).toMatch(/quote[^.]*without[^.]*">"/i)
+  })
+})
+

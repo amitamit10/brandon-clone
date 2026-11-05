@@ -18,23 +18,31 @@ export const DEFAULT_OPENROUTER_MODEL = 'stealth/crouton-alpha'
  */
 export const DEFAULT_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-3.6-flash']
 
+/**
+ * The final report needs the stronger models first (the lite model gave thin or invalid reports on the
+ * real 14k-message test chat, 2026-11-05); lite is only the last resort.
+ */
+export const REPORT_GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-flash-lite-latest']
+
+export type LlmPurpose = 'summary' | 'report'
+
 const MODEL_NAME = /^[a-z0-9][a-z0-9.-]{1,58}$/
 
-function geminiModels(env: Env): string[] {
+function geminiModels(env: Env, purpose: LlmPurpose): string[] {
   const wanted = (env.GEMINI_MODELS ?? '')
     .split(',')
     .map((m) => m.trim())
     .filter((m) => MODEL_NAME.test(m))
-  return wanted.length > 0 ? wanted : DEFAULT_GEMINI_MODELS
+  return wanted.length > 0 ? wanted : purpose === 'report' ? REPORT_GEMINI_MODELS : DEFAULT_GEMINI_MODELS
 }
 
 /**
  * Builds the provider chain from env. Gemini is primary unless LLM_PRIMARY is 'openrouter'.
  * Only providers with a key are used. Wrapped in the fallback provider with 3 retry rounds.
  */
-export function createProviderFromEnv(env: Env): LlmProvider {
+export function createProviderFromEnv(env: Env, purpose: LlmPurpose = 'summary'): LlmProvider {
   const gemini = env.GEMINI_API_KEY
-    ? geminiModels(env).map((model) => new GeminiProvider(env.GEMINI_API_KEY as string, model))
+    ? geminiModels(env, purpose).map((model) => new GeminiProvider(env.GEMINI_API_KEY as string, model))
     : []
   const openrouter = env.OPENROUTER_API_KEY
     ? new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL)

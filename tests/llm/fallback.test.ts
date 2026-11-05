@@ -115,4 +115,22 @@ describe('generateJson', () => {
     expect(await p.generate(req)).toEqual({ text: 'ok' })
     expect(sleep).toHaveBeenCalledWith(MAX_RETRY_WAIT_MS)
   })
+
+  it('stops at once when the request signal is already aborted', async () => {
+    const a = scripted('a', ['never'])
+    const ctrl = new AbortController()
+    ctrl.abort()
+    const p = createFallbackProvider([a.provider], { retries: 3, sleep: async () => {} })
+    await expect(p.generate({ ...req, signal: ctrl.signal })).rejects.toThrow('llm_deadline')
+    expect(a.calls).toHaveLength(0)
+  })
+
+  it('does not start another round once the signal aborted during the backoff sleep', async () => {
+    const a = scripted('a', [new Error('boom')])
+    const ctrl = new AbortController()
+    const p = createFallbackProvider([a.provider], { retries: 3, sleep: async () => ctrl.abort() })
+    await expect(p.generate({ ...req, signal: ctrl.signal })).rejects.toThrow('llm_deadline')
+    expect(a.calls).toHaveLength(1)
+  })
 })
+

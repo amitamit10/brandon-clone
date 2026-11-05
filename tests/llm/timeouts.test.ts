@@ -42,5 +42,21 @@ describe('upstream calls are time-bounded', () => {
   it('the job lease outlives the slowest upstream call', () => {
     expect(LEASE_MS).toBeGreaterThan(LLM_SLOW_FETCH_TIMEOUT_MS)
   })
+
+  it('a request signal aborts the upstream call (both adapters)', async () => {
+    const seen: (AbortSignal | undefined)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        seen.push(init?.signal ?? undefined)
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'x' }] } }], choices: [{ message: { content: 'x' } }] }), { status: 200 })
+      }),
+    )
+    const ctrl = new AbortController()
+    await new GeminiProvider('k').generate({ system: 's', prompt: 'p', signal: ctrl.signal })
+    await new OpenRouterProvider('k', 'm').generate({ system: 's', prompt: 'p', signal: ctrl.signal })
+    ctrl.abort()
+    expect(seen.map((s) => s?.aborted)).toEqual([true, true])
+  })
 })
 
