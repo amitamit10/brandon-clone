@@ -10,6 +10,18 @@ import { createFallbackProvider, type LlmProvider } from './provider'
  */
 export const DEFAULT_OPENROUTER_MODEL = 'stealth/crouton-alpha'
 
+/** Free OpenRouter models, tried in order (both 1M-token context, JSON mode; checked 2026-11-05). */
+export const DEFAULT_OPENROUTER_MODELS = [DEFAULT_OPENROUTER_MODEL, 'nvidia/nemotron-3.5-super-vl:free']
+
+function openrouterModels(env: Env): string[] {
+  if (env.OPENROUTER_MODEL) return [env.OPENROUTER_MODEL] // single-model override
+  const wanted = (env.OPENROUTER_MODELS ?? '')
+    .split(',')
+    .map((m) => m.trim())
+    .filter((m) => /^[a-z0-9][a-z0-9._:/-]{2,80}$/i.test(m))
+  return wanted.length > 0 ? wanted : DEFAULT_OPENROUTER_MODELS
+}
+
 /**
  * Gemini models tried in order (checked against the live model list on 2026-11-05). Free-tier models
  * are often overloaded (503) or retired for new users (404, e.g. gemini-2.5-flash), so there is a
@@ -44,11 +56,10 @@ export function createProviderFromEnv(env: Env, purpose: LlmPurpose = 'summary')
   const gemini = env.GEMINI_API_KEY
     ? geminiModels(env, purpose).map((model) => new GeminiProvider(env.GEMINI_API_KEY as string, model))
     : []
-  const openrouter = env.OPENROUTER_API_KEY
-    ? new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL)
-    : undefined
-  const others: LlmProvider[] = openrouter ? [openrouter] : []
-  const providers: LlmProvider[] = env.LLM_PRIMARY === 'openrouter' ? [...others, ...gemini] : [...gemini, ...others]
+  const openrouter: LlmProvider[] = env.OPENROUTER_API_KEY
+    ? openrouterModels(env).map((model) => new OpenRouterProvider(env.OPENROUTER_API_KEY as string, model))
+    : []
+  const providers: LlmProvider[] = env.LLM_PRIMARY === 'openrouter' ? [...openrouter, ...gemini] : [...gemini, ...openrouter]
   if (providers.length === 0) throw new Error('no_llm_key_configured')
   return createFallbackProvider(providers, {
     retries: 3,

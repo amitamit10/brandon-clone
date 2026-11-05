@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { createDb } from '../../src/worker/db'
 import { ADVANCE_DEADLINE_MS, advanceReport, LEASE_MS, MAX_FAILURES, RETRIEVED_MAX_CHARS, retrievedLines } from '../../src/worker/jobs'
 import type { Env } from '../../src/worker/index'
-import { applyMigrations, chatWith, fakeProvider, uploadBody } from './support'
+import { applyMigrations, chatWith, fakeProvider, isSummaryCall, uploadBody } from './support'
 
 const E = env as unknown as Env
 beforeAll(async () => {
@@ -138,3 +138,49 @@ describe('retrievedLines', () => {
     expect(lines).toContain('23:59 Ben: the umbrella was found by Dana')
   })
 })
+
+describe('direct mode (LLM_DIRECT=1): one model call for the whole chat', () => {
+  const direct = (over: Record<string, string> = {}) => ({ ...E, LLM_DIRECT: '1', ...over }) as Env
+
+  it('a many-chunk chat is reported in ONE call with the full transcript, no summaries', async () => {
+    const now = () => 7_000_000
+    const { reportId, chunks } = await setup(now)
+    expect(chunks).toBeGreaterThan(3)
+    const provider = fakeProvider()
+    const state = await advanceReport(direct(), reportId, { provider, now })
+    expect(state).toMatchObject({ status: 'done', phase: 'done' })
+    expect(provider.calls).toHaveLength(1)
+    expect(isSummaryCall(provider.calls[0])).toBe(false)
+    expect(provider.calls[0].prompt).toContain('Full chat transcript')
+    expect(provider.calls[0].prompt).toContain('Ana: hello there')
+  })
+
+  it('falls back to chunk summaries when the chat is bigger than LLM_DIRECT_MAX_CHARS', async () => {
+    const now = () => 7_100_000
+    const { reportId } = await setup(now)
+    const provider = fakeProvider()
+    await advanceReport(direct({ LLM_DIRECT_MAX_CHARS: '100' }), reportId, { provider, now })
+    expect(isSummaryCall(provider.calls[0])).toBe(true)
+  })
+
+  it('is off unless LLM_DIRECT is 1', async () => {
+    const now = () => 7_200_000
+    const { reportId } = await setup(now)
+    const provider = fakeProvider()
+    await advanceReport(E, reportId, { provider, now })
+    expect(isSummaryCall(provider.calls[0])).toBe(true)
+  })
+
+  it('a follow-up in direct mode needs no summaries: one call with the retrieved lines', async () => {
+    const now = () => 7_300_000
+    const { db, chatId } = await setup(now)
+    const reportId = await db.createReport({ chatId, persona: 'brandon', language: 'English', me: 'Ana', kind: 'followup', question: 'who said hello there', total: 2 })
+    const followupReply = () => JSON.stringify({ title: '', intro: '', verdict: 'Ana said it.', dynamic: '', shiftWeekNote: '', runningJokes: [], sections: [{ emoji: '🔎', heading: 'Answer', body: 'Ana said hello there.' }], advice: '' })
+    const provider = fakeProvider(followupReply)
+    const state = await advanceReport(direct(), reportId, { provider, now })
+    expect(provider.calls).toHaveLength(1)
+    expect(provider.calls[0].prompt).toContain('who said hello there')
+    expect(state).toMatchObject({ status: 'done' })
+  })
+})
+

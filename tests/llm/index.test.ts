@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createProviderFromEnv, DEFAULT_GEMINI_MODELS, REPORT_GEMINI_MODELS } from '../../src/llm/index'
+import { createProviderFromEnv, DEFAULT_GEMINI_MODELS, DEFAULT_OPENROUTER_MODELS, REPORT_GEMINI_MODELS } from '../../src/llm/index'
 import type { Env } from '../../src/worker/index'
 
 const env = (over: Partial<Env>) => ({ DB: {} as D1Database, ASSETS: {} as Fetcher, ...over }) as Env
@@ -80,6 +80,26 @@ describe('createProviderFromEnv', () => {
     expect(REPORT_GEMINI_MODELS[0]).not.toBe(DEFAULT_GEMINI_MODELS[0])
     expect(REPORT_GEMINI_MODELS.some((m) => m.includes('lite'))).toBe(true) // lite is only the last resort
     expect(REPORT_GEMINI_MODELS.findIndex((m) => m.includes('lite'))).toBe(REPORT_GEMINI_MODELS.length - 1)
+  })
+
+  it('chains OpenRouter models: a failing first model falls through to the second', async () => {
+    const models: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        models.push(JSON.parse(String(init?.body)).model)
+        return models.length === 1 ? new Response('{}', { status: 429, headers: { 'retry-after': '1' } }) : openrouterOk()
+      }),
+    )
+    const out = await createProviderFromEnv(env({ OPENROUTER_API_KEY: 'o-key', OPENROUTER_MODELS: 'vendor/a:free,vendor/b:free' })).generate({ system: 's', prompt: 'p' })
+    expect(out.text).toBe('o')
+    expect(models).toEqual(['vendor/a:free', 'vendor/b:free'])
+  })
+
+  it('the default OpenRouter chain has crouton first and a second distinct free model', () => {
+    expect(DEFAULT_OPENROUTER_MODELS[0]).toBe('stealth/crouton-alpha')
+    expect(new Set(DEFAULT_OPENROUTER_MODELS).size).toBeGreaterThanOrEqual(2)
+    expect(DEFAULT_OPENROUTER_MODELS.every((m) => m.endsWith(':free') || m.startsWith('stealth/'))).toBe(true)
   })
 })
 

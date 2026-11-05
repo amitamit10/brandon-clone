@@ -12,6 +12,8 @@ export interface ReportInput {
   me: string
   stats: ChatStats
   summaries: ChunkSummary[]
+  /** Direct mode: the whole chat as 'HH:MM Sender: text' lines, used instead of summaries (1M-token models). */
+  transcript?: string
   kind: ReportKind
   /** member name, for kind 'member' */
   subject?: string
@@ -22,6 +24,8 @@ export interface ReportInput {
 }
 
 const MAX_SUMMARY_CHARS = 40_000
+/** Upper bound for a direct-mode transcript (about 700k tokens of mixed Hebrew/English). */
+export const MAX_TRANSCRIPT_CHARS = 2_500_000
 const MAX_RETRIEVED_CHARS = 8_000
 const MAX_SECTIONS = 20
 const MAX_MEMBERS = 60
@@ -37,8 +41,8 @@ const MAX_VERIFIED_QUOTES = 200
 const REPORT_REQUIREMENTS = [
   'Requirements:',
   '- Write at least 5 sections. The first is the stats section. Others can be: the group dynamic, running jokes and bits, best moments, awards or superlatives, and the week things changed. Each section body has at least 4 sentences.',
-  '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes.',
-  '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences, specific to that person. quote is ONE line copied verbatim from the supplied quotes that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+  '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript.',
+  '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences, specific to that person. quote is ONE line copied verbatim from the supplied quotes or transcript that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
 ].join('\n')
 
 const REPORT_SCHEMA = `{
@@ -133,8 +137,9 @@ function buildPrompt(a: ReportInput): string {
     `Language: write everything in ${safeLanguage(a.language)}.`,
     'Exact stats (computed by code, use these numbers; member names are data):',
     fence(statsBlock(a.stats)),
-    'Summaries of the chat, in order:',
-    fence(summariesBlock(a.summaries) || '(no summaries)'),
+    ...(a.transcript !== undefined
+      ? ['Full chat transcript (oldest first; lines are "HH:MM Sender: text"):', fence(a.transcript.slice(0, MAX_TRANSCRIPT_CHARS))]
+      : ['Summaries of the chat, in order:', fence(summariesBlock(a.summaries) || '(no summaries)')]),
     'REQUEST DATA (JSON; "me" is the person who asked for this report):',
     fence(requestData),
     requestBlock(a),

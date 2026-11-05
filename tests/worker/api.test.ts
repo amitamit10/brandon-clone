@@ -559,17 +559,24 @@ describe('reports, sharing and deletion', () => {
     expect((await send(app, 'GET', `/api/reports/${reportId}`)).status).toBe(404)
   })
 
-  it('deleting a report or a chat makes it 404', async () => {
+  it('deleting a report or a chat makes it 404, and the last report takes the chat with it', async () => {
     const app = createApp({ provider: fakeProvider() })
     const up = await uploadChat(app, uploadBody(chatWith(40)))
     const r1 = await createReport(app, up.chatId)
+    const r2 = await createReport(app, up.chatId)
     expect((await send(app, 'DELETE', `/api/reports/${r1}`)).status).toBe(200)
     expect((await send(app, 'GET', `/api/reports/${r1}`)).status).toBe(404)
+    expect((await send(app, 'GET', `/api/reports/${r2}`)).status).toBe(200) // another report keeps the chat alive
 
-    expect((await send(app, 'DELETE', `/api/chats/${up.chatId}`)).status).toBe(200)
+    expect((await send(app, 'DELETE', `/api/reports/${r2}`)).status).toBe(200)
+    // r2 was the last report: the chat and its stored text are gone too
+    expect((await send(app, 'DELETE', `/api/chats/${up.chatId}`)).status).toBe(404)
     expect((await send(app, 'POST', `/api/chats/${up.chatId}/reports`, {
       json: { persona: 'brandon', language: 'English', me: 'Ana', kind: 'group' },
     })).status).toBe(404)
+
+    const up2 = await uploadChat(app, uploadBody(chatWith(40)))
+    expect((await send(app, 'DELETE', `/api/chats/${up2.chatId}`)).status).toBe(200)
   })
 
   it('scheduled() deletes expired chats and old rate rows', async () => {

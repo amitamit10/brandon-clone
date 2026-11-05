@@ -11,6 +11,10 @@ export interface Env {
   ASSETS: Fetcher
   GEMINI_API_KEY?: string
   GEMINI_MODELS?: string
+  OPENROUTER_MODELS?: string
+  /** '1' = send the whole chat to the model in one call instead of chunk summaries */
+  LLM_DIRECT?: string
+  LLM_DIRECT_MAX_CHARS?: string
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   LLM_PRIMARY?: 'gemini' | 'openrouter'

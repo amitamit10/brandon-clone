@@ -113,8 +113,12 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   if (!chat) return null
   const rows = await db.getChunks(report.chatId)
   const total = rows.length + 1
-  const pending = rows.find((r) => r.summary === null)
-  const summarized = rows.filter((r) => r.summary !== null).length
+  // Direct mode: models with a ~1M-token context can read the whole chat in ONE call (free tiers allow only
+  // a few dozen requests a day, so 24 summary calls per report would not fit).
+  const totalChars = rows.reduce((n, r) => n + r.text.length, 0)
+  const direct = env.LLM_DIRECT === '1' && totalChars <= directMaxChars(env)
+  const pending = direct ? undefined : rows.find((r) => r.summary === null)
+  const summarized = direct ? 0 : rows.filter((r) => r.summary !== null).length
 
   // Throws no_llm_key_configured (mapped to 503 by the route). Not counted as a failure.
   const base = deps.provider ?? createProviderFromEnv(env, pending ? 'summary' : 'report')
@@ -151,8 +155,9 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   }
 
   // All chunks are summarised: write the report. A follow-up first retrieves the chunks that match its question.
-  const summaries = rows.map((r) => r.summary as ChunkSummary)
+  const summaries = direct ? [] : rows.map((r) => r.summary as ChunkSummary)
   const followup = report.kind === 'followup'
+  const transcript = direct && !followup ? rows.map((r) => r.text).join('\n') : undefined
   const question = followup ? (report.question ?? '') : undefined
   const retrieved = followup ? retrievedLines(searchChunks(rows.map((r) => ({ idx: r.idx, text: r.text })), question ?? '', RETRIEVE_K), question ?? '') : undefined
   let generated: GroupReport
@@ -163,6 +168,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
       me: report.me,
       stats: chat.stats,
       summaries,
+      transcript,
       kind: followup ? 'followup' : report.kind === 'member' ? 'member' : 'group',
       subject: report.subject ?? undefined,
       question,
@@ -189,6 +195,11 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     return current ? stateOf(current) : null
   }
   return { status: 'done', phase: 'done', progress: total, total }
+}
+
+function directMaxChars(env: Env): number {
+  const n = Number(env.LLM_DIRECT_MAX_CHARS)
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 2_500_000) : 1_200_000
 }
 
 function stateOf(r: { status: ReportStatus; progress: number; total: number; error: string | null }, pendingSummaries = false): JobState {

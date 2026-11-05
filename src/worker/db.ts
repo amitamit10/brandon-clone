@@ -349,8 +349,19 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
 
     deleteChat,
 
+    /**
+     * Deletes a report. If that leaves its chat with no reports, the chat and its stored text go too, in
+     * the same atomic batch, so the outcome never depends on what a browser thinks it has left.
+     */
     async deleteReport(id: string): Promise<void> {
-      await d1.prepare('DELETE FROM reports WHERE id = ?').bind(id).run()
+      const row = await d1.prepare('SELECT chat_id FROM reports WHERE id = ?').bind(id).first<{ chat_id: string }>()
+      if (!row) return
+      const orphan = 'NOT EXISTS (SELECT 1 FROM reports r WHERE r.chat_id = ?)'
+      await d1.batch([
+        d1.prepare('DELETE FROM reports WHERE id = ?').bind(id),
+        d1.prepare(`DELETE FROM chat_chunks WHERE chat_id = ? AND ${orphan}`).bind(row.chat_id, row.chat_id),
+        d1.prepare(`DELETE FROM chats WHERE id = ? AND ${orphan}`).bind(row.chat_id, row.chat_id),
+      ])
     },
 
     /**

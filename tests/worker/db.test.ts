@@ -217,3 +217,43 @@ describe('insertChat uses multi-row inserts', () => {
   })
 })
 
+describe('deleting the last report removes the chat and its stored text', () => {
+  const db = createDb(DB)
+  const countRows = async (table: string, chatId: string) =>
+    (await DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${table === 'chats' ? 'id' : 'chat_id'} = ?`).bind(chatId).first<{ n: number }>())?.n
+
+  it('deleteReport of the only report deletes the chat row and its chunks', async () => {
+    const chatId = await db.insertChat(newChat())
+    const reportId = await db.createReport(newReport(chatId))
+    await db.deleteReport(reportId)
+    expect(await countRows('chats', chatId)).toBe(0)
+    expect(await countRows('chat_chunks', chatId)).toBe(0)
+    expect(await countRows('reports', chatId)).toBe(0)
+  })
+
+  it('deleteReport of one of two reports keeps the chat and its chunks', async () => {
+    const chatId = await db.insertChat(newChat())
+    const r1 = await db.createReport(newReport(chatId))
+    await db.createReport(newReport(chatId))
+    await db.deleteReport(r1)
+    expect(await countRows('chats', chatId)).toBe(1)
+    expect(await countRows('chat_chunks', chatId)).toBe(3)
+    expect(await countRows('reports', chatId)).toBe(1)
+  })
+
+  it('does not touch another chat that has no report yet (a fresh upload)', async () => {
+    const fresh = await db.insertChat(newChat())
+    const chatId = await db.insertChat(newChat())
+    const reportId = await db.createReport(newReport(chatId))
+    await db.deleteReport(reportId)
+    expect(await countRows('chats', fresh)).toBe(1)
+    expect(await countRows('chat_chunks', fresh)).toBe(3)
+  })
+
+  it('an unknown report id is a no-op', async () => {
+    const chatId = await db.insertChat(newChat())
+    await db.deleteReport('0'.repeat(32))
+    expect(await countRows('chats', chatId)).toBe(1)
+  })
+})
+
