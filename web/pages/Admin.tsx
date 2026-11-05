@@ -450,48 +450,66 @@ function ChatDetailView({ chatId, onError, onChanged }: { chatId: string; onErro
       {showMessages && <MessageViewer chatId={chatId} chunks={detail.chunks} onError={onError} />}
       {detail.reports.length === 0 && <p className="muted small">No reports for this chat.</p>}
       {detail.reports.map((r) => (
-        <ReportCard key={r.id} report={r} onRun={(action) => void run(action, () => setReloadKey((k) => k + 1))} />
+        <ReportCard key={r.id} chatId={chatId} report={r} onRun={(action) => void run(action, () => setReloadKey((k) => k + 1))} />
       ))}
     </div>
   )
 }
 
-function ReportCard({ report, onRun }: { report: ReportView; onRun: (action: () => Promise<unknown>) => void }) {
+function ReportCard({ chatId, report, onRun }: { chatId: string; report: ReportView; onRun: (action: () => Promise<unknown>) => void }) {
+  const fullReportUrl = `/c/${encodeURIComponent(chatId)}/reports/${encodeURIComponent(report.id)}`
+  const sharedUrl = report.shareId ? `/s/${encodeURIComponent(report.shareId)}` : null
+
   return (
     <article className="admin-report stack">
-      <p className="small muted">
-        {report.kind} · {report.persona} · {report.language} · {report.status} {report.progress}/{report.total}
-        {report.error ? ` · error: ${report.error}` : ''}
-        {report.question ? ' · follow-up question' : ''}
-      </p>
-      {report.question && <p className="small">Question: {report.question}</p>}
-      {report.content ? <ReportBody content={report.content} /> : <p className="muted small">No report text yet.</p>}
-      <div className="admin-actions">
-        {report.shareId && (
-          <a
-            href={`/s/${report.shareId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary"
-            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-          >
-            🔗 Open Shared Report ↗
-          </a>
-        )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+        <p className="small muted" style={{ margin: 0 }}>
+          <strong>{report.kind.toUpperCase()}</strong> · {report.persona} · {report.language} ·{' '}
+          <span style={{ fontWeight: 600 }}>{report.status}</span> ({report.progress}/{report.total})
+          {report.error ? ` · error: ${report.error}` : ''}
+          {report.question ? ' · follow-up' : ''}
+        </p>
+        <span className="small muted">{fmtDate(report.createdAt)}</span>
+      </div>
+      {report.question && <p className="small"><strong>Question:</strong> {report.question}</p>}
+      <div className="admin-actions" style={{ marginTop: 8, marginBottom: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <a
-          href={`/report/${report.id}`}
+          href={fullReportUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="btn btn-ghost"
-          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          className="btn btn-primary"
+          style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
         >
-          📄 View Report Page ↗
+          📄 View Full Report Page ↗
         </a>
+        {sharedUrl && (
+          <a
+            href={sharedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            🔗 Open Shared Link ↗
+          </a>
+        )}
         {report.shared && (
           <TwoStep label="Stop sharing" confirmLabel="Confirm stop sharing" onConfirm={() => onRun(() => adminApi.unshareReport(report.id))} />
         )}
         <TwoStep label="Delete report" confirmLabel="Confirm delete report" onConfirm={() => onRun(() => adminApi.deleteReport(report.id))} />
       </div>
+      {report.content ? (
+        <details className="admin-report-details" style={{ marginTop: 4 }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', color: 'var(--primary)' }}>
+            👁️ Preview Raw Text Content
+          </summary>
+          <div style={{ marginTop: 10 }}>
+            <ReportBody content={report.content} />
+          </div>
+        </details>
+      ) : (
+        <p className="muted small">No report text yet.</p>
+      )}
     </article>
   )
 }

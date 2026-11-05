@@ -42,12 +42,13 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
   const show = searchParams.get('show')
   const step = clamp(Number(searchParams.get('step')) || 1, 1, STORY_COUNT)
 
+  const effectiveChatId = chatId || view?.chatId || ''
   const persona: PersonaId = view?.persona ?? session?.persona ?? history?.persona ?? 'brandon'
   const language = view?.language ?? session?.language ?? history?.language ?? 'English'
   const me = session?.me ?? history?.me
   const settings: ReaderSettings | null =
-    me !== undefined
-      ? { chatId, name: session?.groupName ?? history?.name ?? 'Chat', persona, language, me }
+    me !== undefined && effectiveChatId
+      ? { chatId: effectiveChatId, name: session?.groupName ?? history?.name ?? 'Chat', persona, language, me }
       : null
 
   const goStep = (n: number) => setSearchParams({ show: 'steps', step: String(n) })
@@ -56,7 +57,7 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
   const header = (
     <header className="topbar">
       <div className="topbar-inner">
-        <Link to={`/c/${encodeURIComponent(chatId)}`} className="icon-btn" aria-label={t.report.backToChat}>
+        <Link to={effectiveChatId ? `/c/${encodeURIComponent(effectiveChatId)}` : '/admin'} className="icon-btn" aria-label={t.report.backToChat}>
           ←
         </Link>
         <span className="wordmark">Brandon Clone</span>
@@ -73,7 +74,7 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
     return (
       <>
         {header}
-        <FailedScreen job={job} chatId={chatId} settings={settings} view={view} />
+        <FailedScreen job={job} chatId={effectiveChatId} settings={settings} view={view} />
       </>
     )
   }

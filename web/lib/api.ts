@@ -32,6 +32,7 @@ export interface ReportView {
   kind: ReportKind
   subject: string | null
   error: string | null
+  chatId?: string
   content?: GroupReport
 }
 

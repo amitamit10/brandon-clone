@@ -2052,18 +2052,24 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 .podium-name {
   font-size: 0.92rem;
   font-weight: 700;
-  max-width: 125px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #fff;
+  color: #111827;
   margin: 2px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .podium-name {
+    color: #f8fafc;
+  }
 }
 
 .podium-1 .podium-name {
   font-size: 1.05rem;
   font-weight: 800;
-  max-width: 145px;
+  max-width: 150px;
 }
 
 .podium-badge-champ {
@@ -2087,21 +2093,33 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 }
 
 .podium-score-gold {
-  color: #fde047;
+  color: #d97706 !important;
   font-size: 0.94rem;
   text-shadow: 0 0 12px rgba(250, 204, 21, 0.45);
 }
 
 .podium-score-silver {
-  color: #f1f5f9;
+  color: #475569 !important;
   font-size: 0.86rem;
-  text-shadow: 0 0 10px rgba(241, 245, 249, 0.35);
 }
 
 .podium-score-bronze {
-  color: #fdba74;
+  color: #c2410c !important;
   font-size: 0.84rem;
-  text-shadow: 0 0 10px rgba(253, 186, 116, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  .podium-score-gold {
+    color: #fde047 !important;
+  }
+  .podium-score-silver {
+    color: #f1f5f9 !important;
+    text-shadow: 0 0 10px rgba(241, 245, 249, 0.4);
+  }
+  .podium-score-bronze {
+    color: #fdba74 !important;
+    text-shadow: 0 0 10px rgba(253, 186, 116, 0.4);
+  }
 }
 
 .podium-pillar {
@@ -2156,6 +2174,26 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 .podium-debtor-row:hover {
   transform: translateY(-2px);
   background: rgba(239, 68, 68, 0.18);
+}
+
+.podium-debtor-row strong {
+  color: #991b1b !important;
+  font-size: 0.95rem;
+}
+
+.podium-debtor-row .small {
+  color: #b91c1c !important;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  .podium-debtor-row strong {
+    color: #fca5a5 !important;
+  }
+  .podium-debtor-row .small {
+    color: #f87171 !important;
+  }
 }
 
 .podium-debtor-row strong {

@@ -19,6 +19,8 @@ export function AppRoutes() {
           <Route path="/history" element={<History />} />
           <Route path="/c/:chatId" element={<Hub />} />
           <Route path="/c/:chatId/reports/:reportId" element={<Report />} />
+          <Route path="/report/:reportId" element={<Report />} />
+          <Route path="/reports/:reportId" element={<Report />} />
           <Route path="/s/:shareId" element={<Shared />} />
           <Route path="/admin" element={<Admin />} />
           <Route path="*" element={<NotFound />} />

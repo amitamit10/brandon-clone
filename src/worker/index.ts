@@ -93,6 +93,7 @@ const reportView = (r: ReportRow) => ({
   subject: r.subject,
   question: r.question,
   error: r.error,
+  chatId: r.chatId,
   ...(r.status === 'done' ? { content: r.content } : {}),
 })
 
