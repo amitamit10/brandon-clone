@@ -313,8 +313,8 @@ function AuraPodium({
             title={second.name}
           >
             <div className="podium-avatar">🥈</div>
-            <span className="podium-name">{second.name}</span>
-            <span className="podium-score">{second.aura?.score}</span>
+            <span className="podium-name" dir="auto">{second.name}</span>
+            <span className="podium-score podium-score-silver" dir="auto">{second.aura?.score}</span>
             <div className="podium-pillar pillar-2">
               <span className="podium-rank">2</span>
             </div>
@@ -334,9 +334,9 @@ function AuraPodium({
               👑
             </span>
             <div className="podium-avatar">🥇</div>
-            <strong className="podium-name">{first.name}</strong>
+            <strong className="podium-name" dir="auto">{first.name}</strong>
             <span className="podium-badge-champ">{t.report.auraChampion}</span>
-            <span className="podium-score podium-score-gold">{first.aura?.score}</span>
+            <span className="podium-score podium-score-gold" dir="auto">{first.aura?.score}</span>
             <div className="podium-pillar pillar-1">
               <span className="podium-rank">1</span>
             </div>
@@ -353,8 +353,8 @@ function AuraPodium({
             title={third.name}
           >
             <div className="podium-avatar">🥉</div>
-            <span className="podium-name">{third.name}</span>
-            <span className="podium-score">{third.aura?.score}</span>
+            <span className="podium-name" dir="auto">{third.name}</span>
+            <span className="podium-score podium-score-bronze" dir="auto">{third.aura?.score}</span>
             <div className="podium-pillar pillar-3">
               <span className="podium-rank">3</span>
             </div>
