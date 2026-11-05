@@ -1,18 +1,8 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, extname } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { SafeText } from '../../web/components/SafeText'
 
 afterEach(cleanup)
-
-function webSourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const full = join(dir, name)
-    if (statSync(full).isDirectory()) return webSourceFiles(full)
-    return ['.ts', '.tsx', '.js', '.jsx', '.html'].includes(extname(name)) ? [full] : []
-  })
-}
 
 describe('SafeText', () => {
   it('shows HTML and markdown link syntax as literal text', () => {
@@ -55,14 +45,15 @@ describe('SafeText', () => {
   })
 })
 
+/** Every source file under web/, read as text at build time. */
+const webSources = import.meta.glob('../../web/**/*.{ts,tsx,js,jsx,html}', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+
 describe('web/ source safety', () => {
   it('never uses raw HTML sinks', () => {
-    const files = webSourceFiles(join(process.cwd(), 'web'))
-    expect(files.length).toBeGreaterThan(5)
-    const offenders = files.filter((file) => {
-      const source = readFileSync(file, 'utf8')
-      return source.includes('dangerouslySetInnerHTML') || source.includes('innerHTML')
-    })
+    expect(Object.keys(webSources).length).toBeGreaterThan(5)
+    const offenders = Object.entries(webSources)
+      .filter(([, source]) => source.includes('dangerouslySetInnerHTML') || source.includes('innerHTML'))
+      .map(([path]) => path)
     expect(offenders).toEqual([])
   })
 })

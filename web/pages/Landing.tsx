@@ -23,6 +23,9 @@ export function Landing() {
           <Mascot persona="brandon" size={32} />
           <span className="wordmark">Brandon Clone</span>
           <span className="topbar-spacer" />
+          <Link className="small" style={{ minHeight: 44, display: 'inline-flex', alignItems: 'center' }} to="/history">
+            My chats
+          </Link>
           <Link className="btn" style={{ minHeight: 44, padding: '0 16px' }} to="/setup">
             Try it now →
           </Link>

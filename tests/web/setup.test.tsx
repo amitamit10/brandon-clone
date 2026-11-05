@@ -18,6 +18,10 @@ function chatText(count: number, senders: string[] = ['Ana', 'Ben']): string {
   return lines.join('\n')
 }
 
+function urlsOf(fetchMock: { mock: { calls: unknown[] } }): string[] {
+  return fetchMock.mock.calls.map((c) => (c as unknown as [string])[0])
+}
+
 function txt(text: string) {
   return new File([text], 'chat.txt', { type: 'text/plain' })
 }
@@ -182,9 +186,10 @@ describe('setup wizard', () => {
     await walkToStart(user)
     await user.click(screen.getByRole('button', { name: 'Create my report' }))
 
-    expect(await screen.findByText('Report page coming in Task 11')).toBeTruthy()
+    // The report route starts its advance loop as soon as it mounts.
+    await waitFor(() => expect(urlsOf(fetchMock)).toContain('/api/reports/rep-1/advance'))
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     const [chatUrl, chatInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(chatUrl).toBe('/api/chats')
     const chatBody = JSON.parse(chatInit.body as string)
@@ -219,19 +224,15 @@ describe('setup wizard', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('blocked')
     })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) =>
-        url === '/api/chats'
-          ? jsonResponse(201, { chatId: 'chat-2' })
-          : jsonResponse(201, { reportId: 'rep-2' }),
-      ),
+    const fetchMock = vi.fn(async (url: string) =>
+      url === '/api/chats' ? jsonResponse(201, { chatId: 'chat-2' }) : jsonResponse(201, { reportId: 'rep-2' }),
     )
+    vi.stubGlobal('fetch', fetchMock)
     renderAt('/setup')
     await walkToStart(user)
     await user.click(screen.getByRole('button', { name: 'Create my report' }))
 
-    expect(await screen.findByText('Report page coming in Task 11')).toBeTruthy()
+    await waitFor(() => expect(urlsOf(fetchMock)).toContain('/api/reports/rep-2/advance'))
   })
 
   it('shows a friendly message for HTTP 429 and keeps the user on the page', async () => {
@@ -275,10 +276,9 @@ describe('setup wizard', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/busy right now/)
 
     await user.click(screen.getByRole('button', { name: 'Create my report' }))
-    expect(await screen.findByText('Report page coming in Task 11')).toBeTruthy()
+    await waitFor(() => expect(urlsOf(fetchMock)).toContain('/api/reports/rep-3/advance'))
 
-    const urls = fetchMock.mock.calls.map((c) => (c as unknown as [string])[0])
-    expect(urls).toEqual(['/api/chats', '/api/chats/chat-3/reports', '/api/chats/chat-3/reports'])
+    expect(urlsOf(fetchMock).slice(0, 3)).toEqual(['/api/chats', '/api/chats/chat-3/reports', '/api/chats/chat-3/reports'])
   })
 
   it('goes back to the landing page from step 1', async () => {

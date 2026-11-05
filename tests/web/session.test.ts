@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatStats, ParsedChat } from '../../src/shared/types'
 import { clearSession, getSession, setSession, sessionFor, type ChatSession } from '../../web/lib/session'
@@ -32,6 +30,8 @@ function session(overrides: Partial<ChatSession> = {}): ChatSession {
   }
 }
 
+const sessionSource = import.meta.glob('../../web/lib/session.ts', { query: '?raw', import: 'default', eager: true })['../../web/lib/session.ts'] as string
+
 beforeEach(() => clearSession())
 afterEach(() => {
   clearSession()
@@ -62,7 +62,7 @@ describe('session store', () => {
   })
 
   it('does not reference any persistent storage API in its source', () => {
-    const source = readFileSync(join(process.cwd(), 'web/lib/session.ts'), 'utf8')
+    const source = sessionSource
     expect(source).not.toMatch(/(localStorage|sessionStorage|indexedDB|document\.cookie)\s*[.[]/)
   })
 })
