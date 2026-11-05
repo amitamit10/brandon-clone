@@ -9,7 +9,10 @@
     "not_found_handling": "single-page-application"
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "brandon", "database_id": "local-placeholder", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "brandon", "database_id": "45ef15f8-631c-493f-b4cb-0cc06cb35532", "migrations_dir": "migrations" }
   ],
+  "routes": [{ "pattern": "brandon.amit.rest", "custom_domain": true }],
+  "workers_dev": true,
+  "vars": { "LLM_PRIMARY": "openrouter" },
   "triggers": { "crons": ["0 3 * * *"] }
 }
