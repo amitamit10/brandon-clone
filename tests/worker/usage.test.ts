@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:test'
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { Env } from '../../src/worker/index'
-import { UsageBuffer, bump, dayOf, pruneUsage, recordVisitor } from '../../src/worker/usage'
+import { UsageBuffer, bump, dayOf, pruneUsage, recordVisitor, visitorSecret } from '../../src/worker/usage'
 import { applyMigrations } from './support'
 
 const DB = (env as unknown as Env).DB
@@ -67,6 +67,13 @@ describe('recordVisitor', () => {
     await recordVisitor(DB, SECRET, '2026-11-09', '192.0.2.44')
     const [stored] = await visitorsOn('2026-11-09')
     expect(stored).not.toBe(await sha256Hex('2026-11-09:192.0.2.44'))
+  })
+
+  it('never uses ADMIN_TOKEN: with only ADMIN_TOKEN set, no visitor rows are written', async () => {
+    const onlyAdmin = visitorSecret({ ADMIN_TOKEN: SECRET } as { VISITOR_SECRET?: string })
+    expect(onlyAdmin).toBeNull()
+    await recordVisitor(DB, onlyAdmin, '2026-11-12', '192.0.2.46')
+    expect(await visitorsOn('2026-11-12')).toHaveLength(0)
   })
 
   it('writes nothing when the secret is missing or shorter than 24 characters', async () => {

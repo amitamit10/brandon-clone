@@ -30,11 +30,11 @@ export async function bump(d1: D1Database, day: string, metric: string, key: str
 export const VISITOR_SECRET_MIN = 24
 
 /**
- * The key for visitor values: VISITOR_SECRET, or ADMIN_TOKEN when VISITOR_SECRET is missing. Null when the
- * chosen secret is missing or too short. The secret is only ever used as an HMAC key, never stored or logged.
+ * The key for visitor values: VISITOR_SECRET only. Null when it is missing or too short, and then visitors are
+ * not counted at all. ADMIN_TOKEN is never used here. The secret is only an HMAC key, never stored or logged.
  */
-export function visitorSecret(env: { VISITOR_SECRET?: string; ADMIN_TOKEN?: string }): string | null {
-  const secret = env.VISITOR_SECRET ?? env.ADMIN_TOKEN
+export function visitorSecret(env: { VISITOR_SECRET?: string }): string | null {
+  const secret = env.VISITOR_SECRET
   return typeof secret === 'string' && secret.length >= VISITOR_SECRET_MIN ? secret : null
 }
 

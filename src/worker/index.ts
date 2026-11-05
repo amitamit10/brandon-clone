@@ -17,7 +17,7 @@ export interface Env {
   LLM_PRIMARY?: 'gemini' | 'openrouter'
   /** Admin dashboard. Disabled unless at least 24 characters. */
   ADMIN_TOKEN?: string
-  /** HMAC key for anonymous visitor values. Falls back to ADMIN_TOKEN. */
+  /** HMAC key for anonymous visitor values (at least 24 characters). Visitors are not counted without it. */
   VISITOR_SECRET?: string
 }
 
