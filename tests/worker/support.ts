@@ -1,6 +1,8 @@
 import schema1 from '../../migrations/0001_init.sql?raw'
 import schema2 from '../../migrations/0002_report_failures.sql?raw'
 import schema3 from '../../migrations/0003_report_lease.sql?raw'
+import schema4 from '../../migrations/0004_usage.sql?raw'
+import schema5 from '../../migrations/0005_uploader_name.sql?raw'
 import type { LlmProvider, LlmRequest } from '../../src/llm/provider'
 import { chunkMessages } from '../../src/pipeline/chunk'
 import { computeStats } from '../../src/stats/compute'
@@ -8,7 +10,7 @@ import type { ParsedChat } from '../../src/shared/types'
 
 /** Applies every migration in order (test-only; production uses wrangler migrations). */
 export async function applyMigrations(db: D1Database): Promise<void> {
-  for (const sql of [schema1, schema2, schema3]) {
+  for (const sql of [schema1, schema2, schema3, schema4, schema5]) {
     const statements = sql
       .split(';')
       .map((s) => s.trim())
@@ -88,6 +90,7 @@ export function chatWith(n: number, senders: string[] = ['Ana', 'Ben']): ParsedC
 export function uploadBody(chat: ParsedChat, maxChars = 24_000, name = 'Test group') {
   return {
     name,
+    uploaderName: 'Test User',
     participants: chat.participants,
     stats: computeStats(chat),
     chunks: chunkMessages(chat, maxChars),

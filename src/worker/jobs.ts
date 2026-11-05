@@ -18,6 +18,8 @@ import { searchChunks, tokenize } from '../pipeline/search'
 import type { ChunkSummary, GroupReport, ParsedChat } from '../shared/types'
 import { createDb, type ReportStatus } from './db'
 import type { Env } from './index'
+import { instrument, type LlmCallInfo } from '../llm/index'
+import type { UsageBuffer } from './usage'
 
 /** Consecutive failed LLM steps before a report is marked failed. */
 export const MAX_FAILURES = 5
@@ -35,6 +37,8 @@ export interface JobState {
 export interface AdvanceDeps {
   provider?: LlmProvider
   now?: () => number
+  /** Collects usage counters for this request. Flushed by the route. */
+  usage?: UsageBuffer
 }
 
 const phaseOf = (status: ReportStatus, pendingSummaries: boolean): JobPhase => {
@@ -121,9 +125,16 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   const summarized = direct ? 0 : rows.filter((r) => r.summary !== null).length
 
   // Throws no_llm_key_configured (mapped to 503 by the route). Not counted as a failure.
-  const base = deps.provider ?? createProviderFromEnv(env, pending ? 'summary' : 'report')
+  const onCall = (info: LlmCallInfo) => deps.usage?.llmCall(info)
+  const base = deps.provider
+    ? instrument(deps.provider, { onCall })
+    : createProviderFromEnv(env, { purpose: pending ? 'summary' : 'report', hooks: { onCall } })
   const deadline = AbortSignal.timeout(ADVANCE_DEADLINE_MS)
-  const provider: LlmProvider = { name: base.name, generate: (req) => base.generate({ ...req, signal: req.signal ?? deadline }) }
+  const provider: LlmProvider = {
+    name: base.name,
+    model: base.model,
+    generate: (req) => base.generate({ ...req, signal: req.signal ?? deadline }),
+  }
 
   const claim = await db.claimAttempt(reportId, MAX_FAILURES, LEASE_MS)
   if (claim === null) return null
@@ -135,6 +146,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   if (claim.failures > MAX_FAILURES) {
     // attempts were counted but never completed (crashes): stop retrying
     await db.failReport(reportId, 'llm_error')
+    deps.usage?.add('report_failed', 'all')
     return { status: 'failed', phase: 'failed', progress: summarized, total, error: 'llm_error' }
   }
 
@@ -143,7 +155,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     try {
       summary = await summarizeChunk(provider, { index: pending.idx, fromId: 0, toId: 0, text: pending.text }, report.language)
     } catch (err) {
-      return recordFailure(db, reportId, err, { progress: summarized, total, pending: true }, claim.token)
+      return recordFailure(db, reportId, err, { progress: summarized, total, pending: true }, claim.token, deps.usage)
     }
     await db.saveSummary(report.chatId, pending.idx, summary)
     const progress = summarized + 1
@@ -175,7 +187,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
       retrieved,
     })
   } catch (err) {
-    return recordFailure(db, reportId, err, { progress: summarized, total, pending: false }, claim.token)
+    return recordFailure(db, reportId, err, { progress: summarized, total, pending: false }, claim.token, deps.usage)
   }
 
   const parsed: ParsedChat = {
@@ -194,6 +206,8 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     const current = await db.getReport(reportId)
     return current ? stateOf(current) : null
   }
+  deps.usage?.add('report_done', 'all')
+  deps.usage?.add('report_seconds', 'sum', Math.max(0, Math.round((now() - report.createdAt) / 1000)))
   return { status: 'done', phase: 'done', progress: total, total }
 }
 
@@ -213,9 +227,11 @@ async function recordFailure(
   err: unknown,
   at: { progress: number; total: number; pending: boolean },
   token: number,
+  usage?: UsageBuffer,
 ): Promise<JobState> {
   const code = err instanceof RateLimitError ? 'rate_limited' : 'llm_error'
   const after = await db.failAttempt(reportId, code, MAX_FAILURES, token)
   const status: ReportStatus = after?.status ?? 'running'
+  if (status === 'failed') usage?.add('report_failed', 'all')
   return { status, phase: phaseOf(status, at.pending), progress: at.progress, total: at.total, error: code }
 }

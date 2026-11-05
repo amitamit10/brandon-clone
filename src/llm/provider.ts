@@ -9,6 +9,8 @@ export interface LlmRequest {
 
 export interface LlmProvider {
   name: string
+  /** Model id, when the provider has one (reported to usage hooks). */
+  model?: string
   generate(req: LlmRequest): Promise<{ text: string }>
 }
 

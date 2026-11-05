@@ -8,6 +8,8 @@ export interface UploadStepProps {
   analysed: Analyzed | null
   fileName: string
   onAnalysed: (result: Analyzed, fileName: string) => void
+  uploaderName: string
+  onUploaderName: (name: string) => void
 }
 
 export function qualityLabel(messageCount: number): string {
@@ -16,7 +18,7 @@ export function qualityLabel(messageCount: number): string {
   return 'Thin'
 }
 
-export function UploadStep({ analysed, fileName, onAnalysed }: UploadStepProps) {
+export function UploadStep({ analysed, fileName, onAnalysed, uploaderName, onUploaderName }: UploadStepProps) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [errorKey, setErrorKey] = useState(0)
@@ -68,6 +70,19 @@ export function UploadStep({ analysed, fileName, onAnalysed }: UploadStepProps) 
         <h1 className="step-title">Upload your chat</h1>
         <p className="step-sub">Export a WhatsApp group chat without media, then add the .zip or .txt here.</p>
       </div>
+
+      <label className="stack" style={{ gap: 6 }}>
+        <span style={{ fontWeight: 700 }}>Your name</span>
+        <input
+          className="field"
+          type="text"
+          maxLength={60}
+          autoComplete="name"
+          value={uploaderName}
+          onChange={(e) => onUploaderName(e.target.value)}
+          placeholder="Your name"
+        />
+      </label>
 
       {analysed ? (
         <label className="drop-ready" onDragOver={onDragOver} onDragLeave={() => setDragging(false)} onDrop={onDrop}>

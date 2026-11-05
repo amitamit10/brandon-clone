@@ -54,6 +54,8 @@ export interface SharedReport {
 
 export interface UploadChatBody {
   name: string
+  /** The uploader's own name, self-declared. Stored with the chat. */
+  uploaderName: string
   participants: string[]
   stats: ChatStats
   chunks: Chunk[]

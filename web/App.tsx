@@ -6,6 +6,7 @@ import { Report } from './pages/Report'
 import { History } from './pages/History'
 import { Shared } from './pages/Shared'
 import { NotFound } from './pages/NotFound'
+import { Admin } from './pages/Admin'
 
 export function AppRoutes() {
   return (
@@ -17,6 +18,7 @@ export function AppRoutes() {
         <Route path="/c/:chatId" element={<Hub />} />
         <Route path="/c/:chatId/reports/:reportId" element={<Report />} />
         <Route path="/s/:shareId" element={<Shared />} />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>

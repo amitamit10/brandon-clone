@@ -172,12 +172,14 @@ export function createDb(d1: D1Database, now: () => number = Date.now) {
   }
 
   return {
-    async insertChat(c: { name: string; participants: string[]; stats: ChatStats; chunks: Chunk[]; expiresAt: number }): Promise<string> {
+    async insertChat(c: { name: string; uploaderName?: string | null; participants: string[]; stats: ChatStats; chunks: Chunk[]; expiresAt: number }): Promise<string> {
       const id = randomId()
       const statements: D1PreparedStatement[] = [
         d1
-          .prepare('INSERT INTO chats (id, name, participants_json, stats_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)')
-          .bind(id, c.name, JSON.stringify(c.participants), JSON.stringify(c.stats), Date.now(), c.expiresAt),
+          .prepare(
+            'INSERT INTO chats (id, name, participants_json, stats_json, created_at, expires_at, uploader_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          )
+          .bind(id, c.name, JSON.stringify(c.participants), JSON.stringify(c.stats), Date.now(), c.expiresAt, c.uploaderName ?? null),
         // Multi-row inserts keep the statement count low (D1 free plan: 50 queries per request) and
         // stay under 100 bound parameters per statement (3 per row).
         ...chunkRows(c.chunks, ROWS_PER_INSERT).map((rows) =>

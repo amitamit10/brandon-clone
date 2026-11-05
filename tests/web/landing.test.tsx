@@ -37,7 +37,7 @@ describe('Landing page', () => {
     renderLanding()
     expect(
       screen.getByText(
-        'Free, for friends. Chats are sent to a free-tier AI provider that may use prompts for training.',
+        'Free, for friends. The site owner can read the chats and reports uploaded here, and chats are sent to a free AI provider (Google Gemini or OpenRouter) that may keep or train on them. Uploads are deleted after 30 days.',
       ),
     ).toBeTruthy()
   })

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PersonaId } from '../../src/shared/types'
 import { applyNameMap, renameParticipant } from '../lib/nameMap'
+import { isValidName, loadUploaderName } from '../lib/uploaderName'
 import { reanalyze, type Analyzed } from '../lib/analyze'
 import { UploadStep } from './setup/UploadStep'
 import { MembersStep } from './setup/MembersStep'
@@ -25,6 +26,7 @@ export function Setup() {
   const [me, setMe] = useState<string | null>(null)
   const [persona, setPersona] = useState<PersonaId>('brandon')
   const [language, setLanguage] = useState<string | null>('English')
+  const [uploaderName, setUploaderName] = useState<string>(() => loadUploaderName())
 
   // Stats and chunks follow the renames, so merged people are counted together.
   const renamed = useMemo(
@@ -36,7 +38,7 @@ export function Setup() {
 
   const canContinue =
     step === 1
-      ? original !== null
+      ? original !== null && isValidName(uploaderName)
       : step === 2
         ? groupName.trim().length > 0
         : step === 3
@@ -84,7 +86,13 @@ export function Setup() {
       <main className="wrap wizard-main">
         <div key={step} className="step-enter">
           {step === 1 && (
-            <UploadStep analysed={original} fileName={fileName} onAnalysed={handleAnalyzed} />
+            <UploadStep
+              analysed={original}
+              fileName={fileName}
+              onAnalysed={handleAnalyzed}
+              uploaderName={uploaderName}
+              onUploaderName={setUploaderName}
+            />
           )}
           {step === 2 && renamed && (
             <MembersStep
@@ -115,6 +123,7 @@ export function Setup() {
               me={meValid ? me : null}
               persona={persona}
               language={language}
+              uploaderName={uploaderName}
             />
           )}
         </div>

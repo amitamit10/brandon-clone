@@ -5,6 +5,7 @@ import { readHistory, addHistory } from '../../web/lib/history'
 
 const body = {
   name: 'The Boys',
+  uploaderName: 'Dana',
   participants: ['Ana'],
   stats: {} as never,
   chunks: [],

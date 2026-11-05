@@ -4,7 +4,10 @@ import { advanceReport } from './jobs'
 import { createDb, randomId, type ReportRow } from './db'
 import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
+import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor, visitorSecret } from './usage'
 import { cleanOneLine } from '../pipeline/safety'
+import { createAdminApp } from './admin'
+import { readBounded } from './body'
 
 export interface Env {
   DB: D1Database
@@ -18,6 +21,10 @@ export interface Env {
   OPENROUTER_API_KEY?: string
   OPENROUTER_MODEL?: string
   LLM_PRIMARY?: 'gemini' | 'openrouter'
+  /** Admin dashboard. Disabled unless at least 24 characters. */
+  ADMIN_TOKEN?: string
+  /** HMAC key for anonymous visitor values (at least 24 characters). Visitors are not counted without it. */
+  VISITOR_SECRET?: string
 }
 
 export interface AppDeps {
@@ -39,36 +46,6 @@ const QUESTION_MAX = 500
 
 const isId = (s: string) => HEX32.test(s)
 const notFound = () => new ApiError(404, 'not_found')
-
-/**
- * Reads the body up to max bytes. The declared content-length is checked first, then the bytes
- * actually received, so a missing or false header cannot bypass the cap.
- */
-async function readBounded(req: Request, max: number): Promise<Uint8Array> {
-  const declared = req.headers.get('content-length')
-  if (declared !== null && Number(declared) > max) throw new ApiError(413, 'too_large')
-  if (!req.body) return new Uint8Array(0)
-  const reader = req.body.getReader()
-  const parts: Uint8Array[] = []
-  let size = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    size += value.byteLength
-    if (size > max) {
-      await reader.cancel()
-      throw new ApiError(413, 'too_large')
-    }
-    parts.push(value)
-  }
-  const out = new Uint8Array(size)
-  let offset = 0
-  for (const part of parts) {
-    out.set(part, offset)
-    offset += part.byteLength
-  }
-  return out
-}
 
 /** Decodes strict UTF-8 and parses JSON. Any failure is a 400 bad_request. */
 function parseJson(bytes: Uint8Array): unknown {
@@ -117,6 +94,9 @@ const reportView = (r: ReportRow) => ({
   ...(r.status === 'done' ? { content: r.content } : {}),
 })
 
+/** Anonymous per-client key for visitor counts: the rate-limit bucket key, never the raw IP. */
+const clientKey = (c: Context<{ Bindings: Env }>) => ipBucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown')
+
 export function createApp(deps: AppDeps = {}) {
   const now = deps.now ?? Date.now
   const app = new Hono<{ Bindings: Env }>()
@@ -140,6 +120,7 @@ export function createApp(deps: AppDeps = {}) {
     const ip = c.req.header('CF-Connecting-IP') ?? 'unknown'
     const ok = await checkRateLimit(c.env.DB, await hashIp(ipBucketKey(ip)), bucket, now(), { perHour })
     if (!ok) {
+      await quietly(() => bump(c.env.DB, dayOf(now()), 'rate_limited', bucket))
       c.header('Retry-After', String(retryAfterSeconds(now())))
       throw new ApiError(429, 'rate_limited')
     }
@@ -149,13 +130,21 @@ export function createApp(deps: AppDeps = {}) {
 
   app.post('/api/chats', async (c) => {
     await limit(c, 'chat', LIMITS.createChat)
-    const up = validateUpload(parseJson(await readBounded(c.req.raw, MAX_UPLOAD_BYTES)))
+    const raw = await readBounded(c.req.raw, MAX_UPLOAD_BYTES)
+    const up = validateUpload(parseJson(raw))
     const chatId = await createDb(c.env.DB, now).insertChat({
       name: up.name,
+      uploaderName: up.uploaderName,
       participants: up.participants,
       stats: up.stats,
       chunks: up.chunks,
       expiresAt: now() + CHAT_TTL_MS,
+    })
+    const day = dayOf(now())
+    await quietly(async () => {
+      await bump(c.env.DB, day, 'upload', 'all')
+      await bump(c.env.DB, day, 'upload_bytes', 'all', Math.ceil(raw.byteLength / 1024))
+      await recordVisitor(c.env.DB, visitorSecret(c.env), day, clientKey(c))
     })
     return c.json(
       {
@@ -187,6 +176,11 @@ export function createApp(deps: AppDeps = {}) {
       question: req.question ?? undefined,
       total: chunks.length + 1,
     })
+    const day = dayOf(now())
+    await quietly(async () => {
+      await bump(c.env.DB, day, 'report_created', req.kind)
+      await recordVisitor(c.env.DB, visitorSecret(c.env), day, clientKey(c))
+    })
     return c.json({ reportId }, 201)
   })
 
@@ -194,12 +188,16 @@ export function createApp(deps: AppDeps = {}) {
     const id = c.req.param('id')
     if (!isId(id)) throw notFound()
     await limit(c, 'advance', LIMITS.advance)
+    // LLM attempts and job outcomes are collected in memory and written once, after the job.
+    const usage = new UsageBuffer(now)
     let state
     try {
-      state = await advanceReport(c.env, id, { provider: deps.provider, now })
+      state = await advanceReport(c.env, id, { provider: deps.provider, now, usage })
     } catch (err) {
       if (err instanceof Error && err.message === 'no_llm_key_configured') throw new ApiError(503, 'llm_not_configured')
       throw err
+    } finally {
+      await usage.flush(c.env.DB)
     }
     if (!state) throw notFound()
     return c.json(state)
@@ -263,6 +261,8 @@ export function createApp(deps: AppDeps = {}) {
     return c.json({ groupName: chat.name, persona: report.persona, language: report.language, content: report.content })
   })
 
+  app.route('/api/admin', createAdminApp({ now }))
+
   return app
 }
 
@@ -281,6 +281,11 @@ export async function scheduled(_controller: ScheduledController, env: Env, _ctx
     await deleteOldRateRows(env.DB, at)
   } catch {
     console.warn('scheduled_rate_cleanup_failed')
+  }
+  try {
+    await pruneUsage(env.DB, at)
+  } catch {
+    console.warn('scheduled_usage_cleanup_failed')
   }
 }
 
