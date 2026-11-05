@@ -84,19 +84,28 @@ describe('advanceReport claims and leases', () => {
 
 describe('retrievedLines', () => {
   it('keeps chunk order by idx, drops day headers and blank lines', () => {
-    const lines = retrievedLines([
-      { idx: 2, text: '--- 2025-08-02 ---\n09:00 Ben: later\n' },
-      { idx: 0, text: '--- 2025-08-01 ---\n10:00 Ana: first\r\n\n10:01 Ben: second' },
-    ])
+    const lines = retrievedLines(
+      [
+        { idx: 2, text: '--- 2025-08-02 ---\n09:00 Ben: later\n' },
+        { idx: 0, text: '--- 2025-08-01 ---\n10:00 Ana: first\r\n\n10:01 Ben: second' },
+      ],
+      'nothing matches here',
+    )
     expect(lines).toEqual(['10:00 Ana: first', '10:01 Ben: second', '09:00 Ben: later'])
   })
 
-  it('stops before the total passes RETRIEVED_MAX_CHARS, keeping the earliest lines', () => {
-    const line = 'x'.repeat(999)
-    const text = Array.from({ length: 20 }, () => line).join('\n')
-    const lines = retrievedLines([{ idx: 0, text }])
+  it('stops before the total passes RETRIEVED_MAX_CHARS', () => {
+    const text = Array.from({ length: 20 }, () => 'x'.repeat(999)).join('\n')
+    const lines = retrievedLines([{ idx: 0, text }], 'zebra')
     const total = lines.reduce((n, l) => n + l.length + 1, 0)
     expect(total).toBeLessThanOrEqual(RETRIEVED_MAX_CHARS)
     expect(lines.length).toBe(Math.floor(RETRIEVED_MAX_CHARS / 1000))
+  })
+
+  it('picks the lines that match the question before filling with the rest', () => {
+    const filler = Array.from({ length: 30 }, (_, i) => `09:${String(i).padStart(2, '0')} Ana: ${'filler '.repeat(40)}`)
+    const text = [...filler, '23:59 Ben: the umbrella was found by Dana'].join('\n')
+    const lines = retrievedLines([{ idx: 3, text }], 'Who found the umbrella?')
+    expect(lines).toContain('23:59 Ben: the umbrella was found by Dana')
   })
 })

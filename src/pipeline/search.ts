@@ -6,19 +6,21 @@
  * each emoji. Word tokens shorter than 2 characters are skipped; emoji are always kept.
  */
 
+import { emojiGraphemes } from '../stats/emoji'
+
 const K1 = 1.5
 const B = 0.75
 const MAX_QUERY_TOKENS = 30
 
-const TOKEN = /\p{L}+|\p{N}+|\p{Extended_Pictographic}️?/gu
-const EMOJI = /\p{Extended_Pictographic}/u
+const WORD = /\p{L}+|\p{N}+/gu
 
+/** Word tokens (length 2 or more) plus emoji graphemes, so a skin tone or ZWJ family counts as one token. */
 export function tokenize(text: string): string[] {
   const out: string[] = []
-  for (const m of text.toLowerCase().matchAll(TOKEN)) {
-    const t = m[0]
-    if (t.length >= 2 || EMOJI.test(t)) out.push(t)
+  for (const m of text.toLowerCase().matchAll(WORD)) {
+    if (m[0].length >= 2) out.push(m[0])
   }
+  for (const e of emojiGraphemes(text)) out.push(e)
   return out
 }
 

@@ -14,7 +14,7 @@ import { createProviderFromEnv } from '../llm/index'
 import { generateReport, verifyQuotes } from '../pipeline/report'
 import { reconstructMessages } from '../pipeline/reconstruct'
 import { summarizeChunk } from '../pipeline/summarize'
-import { searchChunks } from '../pipeline/search'
+import { searchChunks, tokenize } from '../pipeline/search'
 import type { ChunkSummary, GroupReport, ParsedChat } from '../shared/types'
 import { createDb, type ReportStatus } from './db'
 import type { Env } from './index'
@@ -52,24 +52,36 @@ export const RETRIEVE_K = 3
 export const RETRIEVED_MAX_CHARS = 8_000
 const DAY_HEADER = /^--- \d{4}-\d{2}-\d{2} ---$/
 
+/** One line longer than this is cut, so a single huge message cannot take the whole budget. */
+const RETRIEVED_LINE_MAX = 2_000
+
 /**
- * The lines of the retrieved chunks, in chunk order (idx), without the '--- date ---' headers and
- * without blank lines. Stops before the total would pass RETRIEVED_MAX_CHARS, so the lines kept are
- * always the earliest ones in chunk order.
+ * Picks the lines of the retrieved chunks for a follow-up, within RETRIEVED_MAX_CHARS. `hits` must be in
+ * rank order (best first), as searchChunks returns them. Lines that share a term with the question are
+ * taken first, so a match late in a chunk is not lost; the rest of the budget is filled in rank order.
+ * Day headers and blank lines are dropped. The result is in chunk order (idx, then line position).
  */
-export function retrievedLines(hits: { idx: number; text: string }[]): string[] {
-  const out: string[] = []
-  let size = 0
-  for (const hit of [...hits].sort((a, b) => a.idx - b.idx)) {
-    for (const raw of hit.text.split('\n')) {
-      const line = raw.replace(/\r$/, '')
-      if (line.trim() === '' || DAY_HEADER.test(line)) continue
-      if (size + line.length + 1 > RETRIEVED_MAX_CHARS) return out
-      out.push(line)
-      size += line.length + 1
-    }
+export function retrievedLines(hits: { idx: number; text: string }[], question: string): string[] {
+  const terms = new Set(tokenize(question))
+  const candidates: { idx: number; pos: number; line: string; matches: boolean }[] = []
+  for (const hit of hits) {
+    hit.text.split('\n').forEach((raw, pos) => {
+      const trimmed = raw.replace(/\r$/, '')
+      if (trimmed.trim() === '' || DAY_HEADER.test(trimmed)) return
+      const line = trimmed.length > RETRIEVED_LINE_MAX ? trimmed.slice(0, RETRIEVED_LINE_MAX) : trimmed
+      candidates.push({ idx: hit.idx, pos, line, matches: tokenize(trimmed).some((t) => terms.has(t)) })
+    })
   }
-  return out
+  const ordered = [...candidates.filter((c) => c.matches), ...candidates.filter((c) => !c.matches)]
+  const chosen: typeof candidates = []
+  let size = 0
+  for (const c of ordered) {
+    if (size + c.line.length + 1 > RETRIEVED_MAX_CHARS) continue
+    chosen.push(c)
+    size += c.line.length + 1
+  }
+  chosen.sort((x, y) => x.idx - y.idx || x.pos - y.pos)
+  return chosen.map((c) => c.line)
 }
 
 /**
@@ -134,7 +146,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   const summaries = rows.map((r) => r.summary as ChunkSummary)
   const followup = report.kind === 'followup'
   const question = followup ? (report.question ?? '') : undefined
-  const retrieved = followup ? retrievedLines(searchChunks(rows.map((r) => ({ idx: r.idx, text: r.text })), question ?? '', RETRIEVE_K)) : undefined
+  const retrieved = followup ? retrievedLines(searchChunks(rows.map((r) => ({ idx: r.idx, text: r.text })), question ?? '', RETRIEVE_K), question ?? '') : undefined
   let generated: GroupReport
   try {
     generated = await generateReport(provider, {

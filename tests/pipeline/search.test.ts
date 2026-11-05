@@ -29,6 +29,17 @@ describe('searchChunks (BM25)', () => {
     expect(searchChunks(chunks, 'מסיבות', 3)).toEqual([])
   })
 
+  it('treats an emoji sequence (skin tone, ZWJ family) as one token', () => {
+    const chunks = [
+      { idx: 0, text: 'thumbs up 👍' },
+      { idx: 1, text: 'a darker thumbs up 👍🏽 here' },
+      { idx: 2, text: 'the whole family 👨‍👩‍👧 came' },
+    ]
+    expect(idxs(searchChunks(chunks, '👍🏽', 3))).toEqual([1])
+    expect(idxs(searchChunks(chunks, '👍', 3))).toEqual([0])
+    expect(idxs(searchChunks(chunks, '👨‍👩‍👧', 3))).toEqual([2])
+  })
+
   it('returns at most k results, none with score 0, ties by idx', () => {
     const chunks = [0, 1, 2, 3, 4].map((idx) => ({ idx, text: 'cat dog' }))
     chunks.push({ idx: 5, text: 'bird' })

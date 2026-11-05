@@ -472,6 +472,27 @@ describe('followup advance', () => {
     expect(prompt.indexOf(question)).toBeLessThan(fenceEnd)
   })
 
+  it('with default-size chunks, the matching line from a late chunk reaches the prompt past an earlier match', async () => {
+    const provider = scripted()
+    const app = createApp({ provider })
+    const chat = chatWith(400)
+    const filler = `chatter about nothing in particular ${'words '.repeat(20)}`
+    chat.messages = chat.messages.map((m, i) => ({
+      ...m,
+      text: i === 5 ? 'umbrella talk early on' : i === 395 ? 'the vanished umbrella was found by Ben' : filler,
+    }))
+    const up = await uploadChat(app, uploadBody(chat)) // default 24,000-char chunks
+    expect(chunkMessages(chat).length).toBeGreaterThan(2)
+    const group = await createReport(app, up.chatId)
+    await advanceUntilDone(app, group)
+
+    const followup = await createReport(app, up.chatId, { kind: 'followup', question: 'Who found the vanished umbrella?' })
+    expect(await advance(app, followup)).toMatchObject({ status: 'done' })
+    const prompt = provider.calls[provider.calls.length - 1].prompt
+    expect(prompt).toContain('the vanished umbrella was found by Ben')
+    expect(prompt).toContain('umbrella talk early on')
+  })
+
   it('an invented quote in a followup answer is dropped; a real one stays', async () => {
     const provider = scripted()
     const app = createApp({ provider })
