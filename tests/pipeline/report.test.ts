@@ -321,6 +321,26 @@ describe('real-data fixes: member quotes with a "> " prefix, and richer output r
     expect(prompt).toMatch(/3 to 5 sentences/i)
     expect(prompt).toMatch(/quote[^.]*without[^.]*">"/i)
   })
+
+  it('verifyQuotes verifies aura peak and loss quotes, keeping real ones and dropping fake ones', () => {
+    const members = [
+      {
+        name: 'Ana',
+        nickname: 'The Boss',
+        opinion: 'Relentless.',
+        aura: {
+          score: '+50,000',
+          status: 'טונות של אורה',
+          peak: { points: '+20,000', reason: 'great starter', quote: '> good morning all everyone' },
+          loss: { points: '-10,000', reason: 'fake slip', quote: 'invented words never said' },
+        },
+      },
+    ]
+    const out = verifyQuotes(withBody('x', members), chat)
+    expect(out.members[0].aura?.score).toBe('+50,000')
+    expect(out.members[0].aura?.peak?.quote).toBe('good morning all everyone')
+    expect(out.members[0].aura?.loss?.quote).toBeUndefined()
+  })
 })
 
 describe('direct mode: the whole chat as a transcript instead of summaries', () => {

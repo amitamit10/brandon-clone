@@ -176,19 +176,15 @@ describe('setup wizard', () => {
     expect(screen.getAllByRole('textbox', { name: /Name for/ })).toHaveLength(2)
   })
 
-  it('persona cards select exactly one persona', async () => {
+  it('persona card selects Brandon as the exclusive persona', async () => {
     const user = userEvent.setup()
     renderAt('/setup')
     await walkToPersona(user)
 
-    const brandon = screen.getByRole('button', { name: /No filter, full receipts/ })
-    const clara = screen.getByRole('button', { name: /Love-science/ })
+    const brandon = screen.getByRole('button', { name: /Brandon/ })
     expect(brandon.getAttribute('aria-pressed')).toBe('true')
-
-    await user.click(clara)
-    expect(clara.getAttribute('aria-pressed')).toBe('true')
-    expect(brandon.getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByRole('button', { name: /Life coach/ }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByRole('button', { name: /Love-science/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Life coach/ })).toBeNull()
   })
 
   it('language "Other" rejects digits and blocks Continue until the entry is valid', async () => {

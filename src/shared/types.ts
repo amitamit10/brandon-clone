@@ -85,6 +85,19 @@ export interface ChunkSummary {
   quotes: string[]
 }
 
+export interface AuraMoment {
+  points: string
+  reason: string
+  quote?: string
+}
+
+export interface MemberAura {
+  score: string
+  status: string
+  peak?: AuraMoment
+  loss?: AuraMoment
+}
+
 export interface GroupReport {
   title: string
   intro: string
@@ -94,6 +107,6 @@ export interface GroupReport {
   runningJokes: string[]
   /** body is markdown; real quotes appear as lines starting with '> ' */
   sections: { emoji: string; heading: string; body: string }[]
-  members: { name: string; nickname: string; opinion: string; quote?: string }[]
+  members: { name: string; nickname: string; opinion: string; quote?: string; aura?: MemberAura }[]
   advice: string
 }

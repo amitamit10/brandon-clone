@@ -1782,3 +1782,128 @@ html[dir='rtl'] .whatsapp-bubble-tail {
   margin-top: 32px;
   padding-bottom: 48px;
 }
+
+/* ---------- Aura Meter ---------- */
+.aura-meter-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--aura-bg, rgba(121, 40, 202, 0.05));
+  border: 1px solid var(--aura-border, rgba(121, 40, 202, 0.2));
+  transition: transform 0.2s ease;
+}
+
+.aura-positive {
+  --aura-bg: rgba(16, 185, 129, 0.06);
+  --aura-border: rgba(16, 185, 129, 0.25);
+  --aura-accent: #059669;
+}
+
+.aura-negative {
+  --aura-bg: rgba(239, 68, 68, 0.06);
+  --aura-border: rgba(239, 68, 68, 0.25);
+  --aura-accent: #dc2626;
+}
+
+.aura-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aura-score-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-size: 0.95rem;
+  letter-spacing: -0.01em;
+}
+
+.aura-positive .aura-score-pill {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.aura-negative .aura-score-pill {
+  background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.aura-label {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.aura-status {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--fg, #111);
+}
+
+.aura-moment {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  .aura-moment {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.aura-moment-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.aura-badge-plus {
+  background: #10b981;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.aura-badge-minus {
+  background: #ef4444;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.aura-quote-peak .whatsapp-bubble {
+  border-left: 3px solid #10b981;
+}
+
+html[dir='rtl'] .aura-quote-peak .whatsapp-bubble {
+  border-left: none;
+  border-right: 3px solid #10b981;
+}
+
+.aura-quote-loss .whatsapp-bubble {
+  border-left: 3px solid #ef4444;
+}
+
+html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
+  border-left: none;
+  border-right: 3px solid #ef4444;
+}

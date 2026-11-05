@@ -124,6 +124,7 @@ export function ReportView({ report, persona, actions, memberAction }: ReportVie
                     </div>
                   </blockquote>
                 )}
+                {m.aura && <AuraCard aura={m.aura} lang={lang} t={t} />}
                 {memberAction?.(m.name)}
               </article>
             ))}
@@ -153,5 +154,94 @@ function Section({ heading, emoji, children }: { heading: string; emoji: string;
       </h2>
       {children}
     </section>
+  )
+}
+
+function AuraCard({
+  aura,
+  t,
+}: {
+  aura: NonNullable<GroupReport['members'][0]['aura']>
+  lang: string
+  t: ReturnType<typeof useI18n>['t']
+}) {
+  const isPositive = !aura.score.trim().startsWith('-')
+  return (
+    <div className={`aura-meter-card ${isPositive ? 'aura-positive' : 'aura-negative'}`} dir="auto">
+      <div className="aura-header">
+        <div className="aura-score-pill">
+          <span className="aura-emoji" aria-hidden="true">
+            {isPositive ? '⚡' : '📉'}
+          </span>
+          <strong>{aura.score}</strong>
+          <span className="aura-label">{t.report.auraScore}</span>
+        </div>
+        {aura.status && <span className="aura-status">{aura.status}</span>}
+      </div>
+
+      <div className="aura-moments stack" style={{ gap: 10, marginTop: 12 }}>
+        {aura.peak && (
+          <div className="aura-moment aura-moment-peak">
+            <div className="aura-moment-title">
+              <span className="aura-badge-plus">{aura.peak.points}</span>
+              <span>{aura.peak.reason}</span>
+            </div>
+            {aura.peak.quote && (
+              <>
+                <p className="small muted" style={{ margin: '6px 0 2px' }}>
+                  {t.report.auraGainHere.replace('{points}', aura.peak.points)}
+                </p>
+                <blockquote dir="auto" className="safe-quote member-quote whatsapp-bubble-wrap aura-quote-peak">
+                  <div className="whatsapp-bubble">
+                    <span className="whatsapp-bubble-tail" aria-hidden="true">
+                      <svg viewBox="0 0 22 18" fill="currentColor">
+                        <path d="M22 0V18H11C7.4 18 3.6 16.4 0.6 13.6C6.2 12.4 8.7 8.7 9.8 4.6C10.6 1.7 15.8 0 22 0Z" />
+                      </svg>
+                    </span>
+                    <div className="whatsapp-bubble-content">{aura.peak.quote}</div>
+                    <span className="whatsapp-checks" aria-hidden="true">
+                      <svg viewBox="0 0 16 15" fill="currentColor">
+                        <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0-.478-.372a.365.365 0 0 0-.51.063L4.566 9.88a.32.32 0 0 1-.484.033L1.891 7.769a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l3.013 2.928c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z" />
+                      </svg>
+                    </span>
+                  </div>
+                </blockquote>
+              </>
+            )}
+          </div>
+        )}
+
+        {aura.loss && (
+          <div className="aura-moment aura-moment-loss">
+            <div className="aura-moment-title">
+              <span className="aura-badge-minus">{aura.loss.points}</span>
+              <span>{aura.loss.reason}</span>
+            </div>
+            {aura.loss.quote && (
+              <>
+                <p className="small muted" style={{ margin: '6px 0 2px' }}>
+                  {t.report.auraLossHere.replace('{points}', aura.loss.points)}
+                </p>
+                <blockquote dir="auto" className="safe-quote member-quote whatsapp-bubble-wrap aura-quote-loss">
+                  <div className="whatsapp-bubble">
+                    <span className="whatsapp-bubble-tail" aria-hidden="true">
+                      <svg viewBox="0 0 22 18" fill="currentColor">
+                        <path d="M22 0V18H11C7.4 18 3.6 16.4 0.6 13.6C6.2 12.4 8.7 8.7 9.8 4.6C10.6 1.7 15.8 0 22 0Z" />
+                      </svg>
+                    </span>
+                    <div className="whatsapp-bubble-content">{aura.loss.quote}</div>
+                    <span className="whatsapp-checks" aria-hidden="true">
+                      <svg viewBox="0 0 16 15" fill="currentColor">
+                        <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0-.478-.372a.365.365 0 0 0-.51.063L4.566 9.88a.32.32 0 0 1-.484.033L1.891 7.769a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l3.013 2.928c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512z" />
+                      </svg>
+                    </span>
+                  </div>
+                </blockquote>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }

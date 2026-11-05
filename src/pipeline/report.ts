@@ -1,7 +1,7 @@
 import { generateJson, type LlmProvider, type LlmRequest } from '../llm/provider'
 import { PERSONAS } from './personas'
 import { cleanOneLine, fence, safeLanguage, sanitizeModelText } from './safety'
-import type { ChatStats, ChunkSummary, GroupReport, ParsedChat, PersonaId } from '../shared/types'
+import type { ChatStats, ChunkSummary, GroupReport, MemberAura, ParsedChat, PersonaId } from '../shared/types'
 
 export type ReportKind = 'group' | 'member' | 'followup'
 
@@ -40,16 +40,17 @@ const MAX_VERIFIED_QUOTES = 200
 
 const REPORT_REQUIREMENTS = [
   'Requirements:',
-  '- Write at least 5 sections. Focus on entertaining thematic chapters (e.g. funny group habits, money/coupons, running jokes and bits, drama, best moments, awards or superlatives, and the week things changed). Do not output a dry stats listing; weave narrative stories. Each section body has at least 4 sentences.',
+  '- Write at least 5 sections. Focus on entertaining thematic chapters (e.g. funny group habits, money/coupons, running jokes and bits, drama, best moments, awards or superlatives, and the week things changed). One section should be the Official Group Aura Leaderboard ("🔮 מדד האורה של ברנדון") ranking who has the most aura and who is in severe aura debt. Do not output a dry stats listing; weave narrative stories. Each section body has at least 4 sentences.',
   '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript. Each quote must be on its own line with a blank line before and after, like:\n\n> verbatim quote\n',
   '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences, specific to that person. quote is ONE line copied verbatim from the supplied quotes or transcript that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+  '- aura: for each member provide their quantified Aura Check: score (e.g. "+50,000 אורה", "-20,000 אורה"), status (e.g. "טונות של אורה", "פשיטת רגל של אורה"), peak (points, reason, quote), and loss (points, reason, quote showing where their aura dropped). Both peak.quote and loss.quote must be real verbatim lines from that member without leading ">" or quotes.',
 ].join('\n')
 
 const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
   "runningJokes": string[],
   "sections": [{"emoji": string, "heading": string, "body": string}],
-  "members": [{"name": string, "nickname": string, "opinion": string, "quote": string}],
+  "members": [{"name": string, "nickname": string, "opinion": string, "quote": string, "aura": {"score": string, "status": string, "peak": {"points": string, "reason": string, "quote": string}, "loss": {"points": string, "reason": string, "quote": string}}}],
   "advice": string
 }`
 
@@ -166,11 +167,32 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     if (!isObject(m)) throw new Error('member is not an object')
     // A quote may be absent (undefined or null). If present it must be a string.
     const quote = m.quote === undefined || m.quote === null ? undefined : str(m.quote)
+    let aura: MemberAura | undefined = undefined
+    if (isObject(m.aura)) {
+      const score = typeof m.aura.score === 'string' ? str(m.aura.score) : typeof m.aura.score === 'number' ? String(m.aura.score) : '0'
+      const status = typeof m.aura.status === 'string' ? str(m.aura.status) : ''
+      const peak = isObject(m.aura.peak)
+        ? {
+            points: typeof m.aura.peak.points === 'string' ? str(m.aura.peak.points) : '+1,000',
+            reason: typeof m.aura.peak.reason === 'string' ? str(m.aura.peak.reason) : '',
+            ...(typeof m.aura.peak.quote === 'string' && m.aura.peak.quote.trim().length > 0 ? { quote: str(m.aura.peak.quote) } : {}),
+          }
+        : undefined
+      const loss = isObject(m.aura.loss)
+        ? {
+            points: typeof m.aura.loss.points === 'string' ? str(m.aura.loss.points) : '-1,000',
+            reason: typeof m.aura.loss.reason === 'string' ? str(m.aura.loss.reason) : '',
+            ...(typeof m.aura.loss.quote === 'string' && m.aura.loss.quote.trim().length > 0 ? { quote: str(m.aura.loss.quote) } : {}),
+          }
+        : undefined
+      aura = { score, status, ...(peak ? { peak } : {}), ...(loss ? { loss } : {}) }
+    }
     return {
       name: str(m.name),
       nickname: str(m.nickname),
       opinion: str(m.opinion, MAX_BODY_CHARS),
       ...(quote ? { quote } : {}),
+      ...(aura ? { aura } : {}),
     }
   }).filter((m) => known.has(m.name)) // the model's names are not trusted: keep only real participants
   if (a.kind === 'member' && !members.some((m) => m.name === a.subject)) {
@@ -213,7 +235,39 @@ function sanitizeReport(r: GroupReport): GroupReport {
     shiftWeekNote: t(r.shiftWeekNote),
     runningJokes: r.runningJokes.map(t),
     sections: r.sections.map((s) => ({ emoji: t(s.emoji), heading: t(s.heading), body: t(s.body) })),
-    members: r.members.map((m) => ({ ...m, name: m.name, nickname: t(m.nickname), opinion: t(m.opinion), ...(m.quote !== undefined ? { quote: t(m.quote) } : {}) })),
+    members: r.members.map((m) => ({
+      ...m,
+      name: m.name,
+      nickname: t(m.nickname),
+      opinion: t(m.opinion),
+      ...(m.quote !== undefined ? { quote: t(m.quote) } : {}),
+      ...(m.aura !== undefined
+        ? {
+            aura: {
+              score: t(m.aura.score),
+              status: t(m.aura.status),
+              ...(m.aura.peak
+                ? {
+                    peak: {
+                      points: t(m.aura.peak.points),
+                      reason: t(m.aura.peak.reason),
+                      ...(m.aura.peak.quote ? { quote: t(m.aura.peak.quote) } : {}),
+                    },
+                  }
+                : {}),
+              ...(m.aura.loss
+                ? {
+                    loss: {
+                      points: t(m.aura.loss.points),
+                      reason: t(m.aura.loss.reason),
+                      ...(m.aura.loss.quote ? { quote: t(m.aura.loss.quote) } : {}),
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+    })),
     advice: t(r.advice),
   }
 }
@@ -304,7 +358,39 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
     sections: report.sections.map((s) => ({ emoji: s.emoji, heading: s.heading, body: cleanBody(s.body) })),
     members: report.members.map((m) => {
       const q = m.quote !== undefined ? verified(m.quote, m.name) : undefined
-      return { name: m.name, nickname: m.nickname, opinion: m.opinion, ...(q !== undefined ? { quote: q } : {}) }
+      let aura = m.aura
+      if (aura) {
+        const peakQuote = aura.peak?.quote ? verified(aura.peak.quote, m.name) : undefined
+        const lossQuote = aura.loss?.quote ? verified(aura.loss.quote, m.name) : undefined
+        const { quote: _pq, ...cleanPeak } = aura.peak ?? { points: '', reason: '' }
+        const { quote: _lq, ...cleanLoss } = aura.loss ?? { points: '', reason: '' }
+        aura = {
+          ...aura,
+          ...(aura.peak
+            ? {
+                peak: {
+                  ...cleanPeak,
+                  ...(peakQuote !== undefined ? { quote: peakQuote } : {}),
+                },
+              }
+            : {}),
+          ...(aura.loss
+            ? {
+                loss: {
+                  ...cleanLoss,
+                  ...(lossQuote !== undefined ? { quote: lossQuote } : {}),
+                },
+              }
+            : {}),
+        }
+      }
+      return {
+        name: m.name,
+        nickname: m.nickname,
+        opinion: m.opinion,
+        ...(q !== undefined ? { quote: q } : {}),
+        ...(aura !== undefined ? { aura } : {}),
+      }
     }),
   }
 }

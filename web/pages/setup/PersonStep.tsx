@@ -84,25 +84,27 @@ export function PersonStep({
           <h2 id="persona-heading" className="step-title" style={{ fontSize: '1.4rem' }}>
             {t.setup.pickPersonaTitle}
           </h2>
-          <p className="step-sub">{t.setup.pickPersonaSub}</p>
+          <p className="step-sub">{appLang === 'he' ? 'דוח ברנדון תקיף וביקורתי עם מדד האורה המלא' : 'Brandon-only mode with the full Aura Check'}</p>
         </div>
         <div className="stack" style={{ gap: 10 }} role="group" aria-label="Persona">
-          {PERSONAS.map((p) => {
-            const meta = personaLabel(p.id)
-            return (
-              <button
-                key={p.id}
-                type="button"
-                className="persona-card"
-                aria-pressed={persona === p.id}
-                onClick={() => onPersona(p.id)}
-              >
-                <Mascot persona={p.id} size={72} />
-                <strong style={{ fontSize: '1.05rem' }}>{meta.name}</strong>
-                <span className="small muted">{meta.tagline}</span>
-              </button>
-            )
-          })}
+          <button
+            type="button"
+            className="persona-card"
+            aria-pressed="true"
+            onClick={() => onPersona('brandon')}
+            style={{ borderColor: 'var(--accent, #ff4081)' }}
+          >
+            <Mascot persona="brandon" size={72} />
+            <div className="stack" style={{ gap: 4, textAlign: 'inherit' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: '1.1rem' }}>{personaLabel('brandon').name}</strong>
+                <span className="badge" style={{ background: '#7928ca', color: '#fff', fontSize: '0.75rem', padding: '2px 8px', borderRadius: 12, fontWeight: 700 }}>
+                  Aura Edition ⚡
+                </span>
+              </div>
+              <span className="small muted">{personaLabel('brandon').tagline}</span>
+            </div>
+          </button>
         </div>
       </section>
 

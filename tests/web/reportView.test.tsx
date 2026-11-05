@@ -61,4 +61,29 @@ describe('ReportView', () => {
     expect(screen.queryByRole('heading', { name: 'The week things changed' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Running jokes' })).toBeNull()
   })
+
+  it('renders member aura meter with score, status, peak and loss quotes', () => {
+    const reportWithAura = {
+      ...reportContent,
+      members: [
+        {
+          name: 'Ana',
+          nickname: 'The Starter',
+          opinion: 'Relentless.',
+          aura: {
+            score: '+75,000',
+            status: 'טונות של אורה',
+            peak: { points: '+25,000', reason: 'smooth exit', quote: 'hello there' },
+            loss: { points: '-10,000', reason: 'voice note spam', quote: 'still here' },
+          },
+        },
+      ],
+    }
+    const { container } = render(<ReportView report={reportWithAura} persona="brandon" />)
+    expect(screen.getByText('+75,000')).toBeTruthy()
+    expect(screen.getByText('טונות של אורה')).toBeTruthy()
+    expect(screen.getByText('+25,000')).toBeTruthy()
+    expect(screen.getByText('-10,000')).toBeTruthy()
+    expect(container.querySelector('.aura-meter-card')).toBeTruthy()
+  })
 })
