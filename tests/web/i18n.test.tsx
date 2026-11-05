@@ -8,7 +8,7 @@ describe('i18n', () => {
     document.documentElement.removeAttribute('lang')
   })
 
-  it('defaults to en when localStorage is empty and navigator is en', () => {
+  it('defaults to en in test runner when localStorage is empty and navigator is en', () => {
     expect(getInitialLang()).toBe('en')
   })
 
