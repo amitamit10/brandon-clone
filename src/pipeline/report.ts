@@ -40,9 +40,10 @@ const MAX_VERIFIED_QUOTES = 200
 
 const REPORT_REQUIREMENTS = [
   'Requirements:',
-  '- Write at least 5 sections. Focus on spicy, entertaining, and savage roast chapters (e.g. cheapness and unpaid debts, flake culture and ghosting, unhinged 3 AM reels/voice notes, group micro-dramas, running jokes, and the week things collapsed). One section must be the Official Group Aura Leaderboard ("🔮 מדד האורה של ברנדון") brutally ranking who has aura and who is in catastrophic aura debt. Do not output dry summaries; write sharp, hilarious, observational roasts. Each section body has at least 4 sentences.',
+  '- Write at least 5 sections (aim for 7 to 10 rich, funny, and deeply detailed chapters). Focus on spicy, entertaining, and savage roast chapters (e.g. cheapness and unpaid debts, flake culture and ghosting, unhinged 3 AM reels/voice notes, group micro-dramas, running jokes, and the week things collapsed). One section must be the Official Group Aura Leaderboard ("🔮 מדד האורה של ברנדון") brutally ranking who has aura and who is in catastrophic aura debt. Do not output dry summaries; write sharp, hilarious, observational roasts. Each section body has at least 4 sentences.',
   '- Across the sections include at least 6 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript. Each quote must be on its own line with a blank line before and after, like:\n\n> verbatim quote\n',
   '- members: one entry for EVERY member listed in the stats. opinion is 3 to 5 sentences of a spicy, hilarious roast dissecting that specific person\'s worst habits and flaws. quote is ONE line copied verbatim from the supplied quotes or transcript that this member wrote, written WITHOUT a leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+  '- member traits: for each member include roast (a dedicated, uncensored personal comedy roast paragraph), smurf (the Smurf character representing them with an amusing Hebrew reason, e.g. "דרדס קוטר - ..."), futurePrediction (satirical 5-10 year prediction of what they will be doing), charisma (charisma rating out of 10 e.g. "1.5/10" with a biting comment), selfImage (how they think they look vs reality e.g. "בטוח שהוא אל יווני | בפועל: ..."), favoriteCurse (their favorite curse word, slang, or catchphrase), and animal (spirit animal with emoji and reason).',
   '- aura: for each member provide their quantified Aura Check: score (e.g. "+50,000 אורה", "-65,000 אורה"), status (e.g. "טונות של אורה", "פשיטת רגל של אורה בדרגת אסון טבע", "קבור באדמה"), peak (points, reason, quote), and loss (points, reason, quote showing where their aura dropped). Both peak.quote and loss.quote must be real verbatim lines from that member without leading ">" or quotes.',
 ].join('\n')
 
@@ -50,7 +51,12 @@ const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
   "runningJokes": string[],
   "sections": [{"emoji": string, "heading": string, "body": string}],
-  "members": [{"name": string, "nickname": string, "opinion": string, "quote": string, "aura": {"score": string, "status": string, "peak": {"points": string, "reason": string, "quote": string}, "loss": {"points": string, "reason": string, "quote": string}}}],
+  "members": [{
+    "name": string, "nickname": string, "opinion": string, "roast": string, "quote": string,
+    "smurf": string, "futurePrediction": string, "charisma": string, "selfImage": string,
+    "favoriteCurse": string, "animal": string,
+    "aura": {"score": string, "status": string, "peak": {"points": string, "reason": string, "quote": string}, "loss": {"points": string, "reason": string, "quote": string}}
+  }],
   "advice": string
 }`
 
@@ -184,6 +190,14 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     if (!isObject(m)) throw new Error('member is not an object')
     // A quote may be absent (undefined or null). If present it must be a string.
     const quote = m.quote === undefined || m.quote === null ? undefined : str(m.quote)
+    const animal = typeof m.animal === 'string' && m.animal.trim().length > 0 ? str(m.animal) : undefined
+    const smurf = typeof m.smurf === 'string' && m.smurf.trim().length > 0 ? str(m.smurf) : undefined
+    const futurePrediction = typeof m.futurePrediction === 'string' && m.futurePrediction.trim().length > 0 ? str(m.futurePrediction) : undefined
+    const charisma = typeof m.charisma === 'string' && m.charisma.trim().length > 0 ? str(m.charisma) : undefined
+    const selfImage = typeof m.selfImage === 'string' && m.selfImage.trim().length > 0 ? str(m.selfImage) : undefined
+    const favoriteCurse = typeof m.favoriteCurse === 'string' && m.favoriteCurse.trim().length > 0 ? str(m.favoriteCurse) : undefined
+    const roast = typeof m.roast === 'string' && m.roast.trim().length > 0 ? str(m.roast, MAX_BODY_CHARS) : undefined
+
     let aura: MemberAura | undefined = undefined
     if (isObject(m.aura)) {
       const score = typeof m.aura.score === 'string' ? str(m.aura.score) : typeof m.aura.score === 'number' ? String(m.aura.score) : '0'
@@ -210,6 +224,13 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
       name: canonicalName ?? rawName,
       nickname: str(m.nickname),
       opinion: str(m.opinion, MAX_BODY_CHARS),
+      ...(roast ? { roast } : {}),
+      ...(animal ? { animal } : {}),
+      ...(smurf ? { smurf } : {}),
+      ...(futurePrediction ? { futurePrediction } : {}),
+      ...(charisma ? { charisma } : {}),
+      ...(selfImage ? { selfImage } : {}),
+      ...(favoriteCurse ? { favoriteCurse } : {}),
       ...(quote ? { quote } : {}),
       ...(aura ? { aura } : {}),
     }
@@ -240,7 +261,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
 
 /** One model call (plus at most one repair) that writes a report in the chosen persona. */
 export async function generateReport(p: LlmProvider, a: ReportInput): Promise<GroupReport> {
-  const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a) }
+  const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a), maxTokens: 8192 }
   return sanitizeReport(await generateJson(p, req, (x) => toReport(x, a)))
 }
 
@@ -259,6 +280,13 @@ function sanitizeReport(r: GroupReport): GroupReport {
       name: m.name,
       nickname: t(m.nickname),
       opinion: t(m.opinion),
+      ...(m.roast !== undefined ? { roast: t(m.roast) } : {}),
+      ...(m.animal !== undefined ? { animal: t(m.animal) } : {}),
+      ...(m.smurf !== undefined ? { smurf: t(m.smurf) } : {}),
+      ...(m.futurePrediction !== undefined ? { futurePrediction: t(m.futurePrediction) } : {}),
+      ...(m.charisma !== undefined ? { charisma: t(m.charisma) } : {}),
+      ...(m.selfImage !== undefined ? { selfImage: t(m.selfImage) } : {}),
+      ...(m.favoriteCurse !== undefined ? { favoriteCurse: t(m.favoriteCurse) } : {}),
       ...(m.quote !== undefined ? { quote: t(m.quote) } : {}),
       ...(m.aura !== undefined
         ? {

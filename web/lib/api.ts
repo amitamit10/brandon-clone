@@ -142,6 +142,17 @@ export function normalizeReport(raw: unknown): GroupReport {
             name: text(m.name),
             nickname: text(m.nickname),
             opinion: text(m.opinion),
+            ...(typeof m.roast === 'string' && m.roast.length > 0 ? { roast: m.roast } : {}),
+            ...(typeof m.animal === 'string' && m.animal.length > 0 ? { animal: m.animal } : {}),
+            ...(typeof m.smurf === 'string' && m.smurf.length > 0 ? { smurf: m.smurf } : {}),
+            ...(typeof m.futurePrediction === 'string' && m.futurePrediction.length > 0
+              ? { futurePrediction: m.futurePrediction }
+              : {}),
+            ...(typeof m.charisma === 'string' && m.charisma.length > 0 ? { charisma: m.charisma } : {}),
+            ...(typeof m.selfImage === 'string' && m.selfImage.length > 0 ? { selfImage: m.selfImage } : {}),
+            ...(typeof m.favoriteCurse === 'string' && m.favoriteCurse.length > 0
+              ? { favoriteCurse: m.favoriteCurse }
+              : {}),
             ...(typeof m.quote === 'string' && m.quote.length > 0 ? { quote: m.quote } : {}),
             ...(isRecord(m.aura)
               ? {

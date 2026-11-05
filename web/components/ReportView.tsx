@@ -107,6 +107,81 @@ export function ReportView({ report, persona, actions, memberAction }: ReportVie
                   </div>
                 </header>
                 <SafeText text={m.opinion} />
+
+                {m.roast && (
+                  <div className="member-roast-callout" dir="auto">
+                    <div className="roast-callout-header">
+                      <span aria-hidden="true">🔥</span>
+                      <strong>{lang === 'he' ? 'הרוסט של ברנדון' : "Brandon's Roast"}</strong>
+                    </div>
+                    <p className="roast-callout-text">{m.roast}</p>
+                  </div>
+                )}
+
+                {(m.smurf || m.animal || m.charisma || m.favoriteCurse || m.selfImage || m.futurePrediction) && (
+                  <div className="member-traits-grid" dir="auto">
+                    {m.smurf && (
+                      <div className="trait-pill trait-smurf">
+                        <span className="trait-icon" aria-hidden="true">🍄</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'דרדס מייצג' : 'Smurf'}</span>
+                          <span className="trait-text">{m.smurf}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.animal && (
+                      <div className="trait-pill trait-animal">
+                        <span className="trait-icon" aria-hidden="true">🐾</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'חיה מייצגת' : 'Spirit Animal'}</span>
+                          <span className="trait-text">{m.animal}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.charisma && (
+                      <div className="trait-pill trait-charisma">
+                        <span className="trait-icon" aria-hidden="true">✨</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'מדד כריזמה' : 'Charisma'}</span>
+                          <span className="trait-text">{m.charisma}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.favoriteCurse && (
+                      <div className="trait-pill trait-curse">
+                        <span className="trait-icon" aria-hidden="true">🤬</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'קללה / ביטוי אהוב' : 'Favorite Curse'}</span>
+                          <span className="trait-text">“{m.favoriteCurse}”</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.selfImage && (
+                      <div className="trait-pill trait-self-image">
+                        <span className="trait-icon" aria-hidden="true">🪞</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'איך הוא חושב שהוא נראה' : 'Self-Image vs Reality'}</span>
+                          <span className="trait-text">{m.selfImage}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {m.futurePrediction && (
+                      <div className="trait-pill trait-future">
+                        <span className="trait-icon" aria-hidden="true">🔮</span>
+                        <div className="trait-body">
+                          <span className="trait-kicker">{lang === 'he' ? 'מה יעשה בעתיד' : 'Future Prediction'}</span>
+                          <span className="trait-text">{m.futurePrediction}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {m.quote && (
                   <blockquote dir="auto" className="safe-quote member-quote whatsapp-bubble-wrap">
                     <div className="whatsapp-bubble">
@@ -292,10 +367,10 @@ function AuraPodium({
             🏆
           </span>
           <div>
-            <h3 className="report-h3" style={{ margin: 0, fontSize: '1.2rem' }}>
+            <h3 className="report-h3 podium-header-title" style={{ margin: 0, fontSize: '1.2rem' }}>
               {t.report.auraPodiumTitle}
             </h3>
-            <p className="small muted" style={{ margin: 0 }}>
+            <p className="small podium-header-sub" style={{ margin: 0 }}>
               {t.report.auraPodiumSub}
             </p>
           </div>
@@ -370,18 +445,18 @@ function AuraPodium({
           tabIndex={0}
           title={lowest.name}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden="true">💀</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="podium-debtor-skull" aria-hidden="true">💀</span>
             <div>
-              <strong style={{ fontSize: '0.9rem' }}>
+              <strong className="podium-debtor-title">
                 {t.report.auraDebtor}: {lowest.name}
               </strong>
-              <div className="small" style={{ opacity: 0.85 }}>
+              <div className="podium-debtor-status">
                 {lowest.aura?.status || 'Aura Bankruptcy'}
               </div>
             </div>
           </div>
-          <span className="aura-badge-minus">{lowest.aura?.score}</span>
+          <span className="aura-badge-minus podium-debtor-score">{lowest.aura?.score}</span>
         </div>
       )}
     </section>

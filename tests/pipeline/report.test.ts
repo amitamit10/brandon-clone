@@ -362,3 +362,35 @@ describe('direct mode: the whole chat as a transcript instead of summaries', () 
     expect(calls[0].prompt.length).toBeLessThan(MAX_TRANSCRIPT_CHARS + 60_000)
   })
 })
+
+describe('member traits: smurf, futurePrediction, charisma, selfImage, favoriteCurse, animal, roast', () => {
+  it('parses and passes through member personality traits', async () => {
+    const reportWithTraits = {
+      ...validGroup,
+      members: [
+        {
+          name: 'Ana',
+          nickname: 'The Starter',
+          opinion: 'Relentless starter.',
+          roast: 'Never sleeps, spams everyone at 3 AM.',
+          smurf: 'דרדס קוטר - שום דבר לא טוב לה',
+          futurePrediction: 'תנהל קיוסק ותצעק על לקוחות',
+          charisma: '1.5/10 - כריזמה של כפכף רטוב',
+          selfImage: 'בטוחה שהיא מלכה | בפועל עונה באיחור',
+          favoriteCurse: 'בחיאת דינכ',
+          animal: '🦥 עצלן תלת-אצבעי',
+          quote: 'good morning all',
+        },
+      ],
+    }
+    const { p } = fake(JSON.stringify(reportWithTraits))
+    const r = await generateReport(p, { ...base, persona: 'brandon' })
+    expect(r.members[0].roast).toBe('Never sleeps, spams everyone at 3 AM.')
+    expect(r.members[0].smurf).toBe('דרדס קוטר - שום דבר לא טוב לה')
+    expect(r.members[0].futurePrediction).toBe('תנהל קיוסק ותצעק על לקוחות')
+    expect(r.members[0].charisma).toBe('1.5/10 - כריזמה של כפכף רטוב')
+    expect(r.members[0].selfImage).toBe('בטוחה שהיא מלכה | בפועל עונה באיחור')
+    expect(r.members[0].favoriteCurse).toBe('בחיאת דינכ')
+    expect(r.members[0].animal).toBe('🦥 עצלן תלת-אצבעי')
+  })
+})

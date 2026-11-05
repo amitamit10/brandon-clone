@@ -66,6 +66,20 @@ describe('createDb', () => {
     expect((await db.getChunks(id))[1].summary).toEqual(summary)
   })
 
+  it('inserts 192 large chunks (35KB each) like real big chat', async () => {
+    const largeText = 'A'.repeat(35_000)
+    const largeChunks: Chunk[] = Array.from({ length: 192 }, (_, i) => ({
+      index: i,
+      fromId: i * 500,
+      toId: (i + 1) * 500,
+      text: largeText,
+    }))
+    const id = await db.insertChat(newChat({ chunks: largeChunks }))
+    expect(id).toMatch(/^[0-9a-f]{32}$/)
+    const rows = await db.getChunks(id)
+    expect(rows).toHaveLength(192)
+  })
+
   it('chat ids are random, not sequential', async () => {
     const a = await db.insertChat(newChat())
     const b = await db.insertChat(newChat())

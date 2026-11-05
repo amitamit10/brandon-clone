@@ -89,6 +89,13 @@ export function formatReportForWhatsApp(report: GroupReport, link?: string, lang
       const nicknameTag = m.nickname ? ` ("${m.nickname}")` : ''
       parts.push(`\n*${m.name}*${nicknameTag}${auraTag}:`)
       if (m.opinion) parts.push(m.opinion)
+      if (m.roast) parts.push(`🔥 *${lang === 'he' ? 'הרוסט של ברנדון:' : "Brandon's Roast:"}* ${m.roast}`)
+      if (m.smurf) parts.push(`🍄 *${lang === 'he' ? 'דרדס מייצג:' : 'Smurf Persona:'}* ${m.smurf}`)
+      if (m.animal) parts.push(`🐾 *${lang === 'he' ? 'חיה מייצגת:' : 'Spirit Animal:'}* ${m.animal}`)
+      if (m.charisma) parts.push(`✨ *${lang === 'he' ? 'מדד כריזמה:' : 'Charisma:'}* ${m.charisma}`)
+      if (m.selfImage) parts.push(`🪞 *${lang === 'he' ? 'איך הוא חושב שהוא נראה:' : 'Self-Image:'}* ${m.selfImage}`)
+      if (m.favoriteCurse) parts.push(`🤬 *${lang === 'he' ? 'קללה / ביטוי אהוב:' : 'Favorite Curse:'}* "${m.favoriteCurse}"`)
+      if (m.futurePrediction) parts.push(`🔮 *${lang === 'he' ? 'מה יעשה בעתיד:' : 'Future Prediction:'}* ${m.futurePrediction}`)
       if (m.quote) parts.push(`> "${m.quote}"`)
     }
   }

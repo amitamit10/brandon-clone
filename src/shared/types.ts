@@ -100,6 +100,21 @@ export interface MemberAura {
   loss?: AuraMoment
 }
 
+export interface MemberReportItem {
+  name: string
+  nickname: string
+  opinion: string
+  quote?: string
+  aura?: MemberAura
+  animal?: string
+  smurf?: string
+  futurePrediction?: string
+  charisma?: string
+  selfImage?: string
+  favoriteCurse?: string
+  roast?: string
+}
+
 export interface GroupReport {
   title: string
   intro: string
@@ -109,6 +124,6 @@ export interface GroupReport {
   runningJokes: string[]
   /** body is markdown; real quotes appear as lines starting with '> ' */
   sections: { emoji: string; heading: string; body: string }[]
-  members: { name: string; nickname: string; opinion: string; quote?: string; aura?: MemberAura }[]
+  members: MemberReportItem[]
   advice: string
 }
