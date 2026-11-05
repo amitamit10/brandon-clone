@@ -142,6 +142,36 @@ export function normalizeReport(raw: unknown): GroupReport {
             nickname: text(m.nickname),
             opinion: text(m.opinion),
             ...(typeof m.quote === 'string' && m.quote.length > 0 ? { quote: m.quote } : {}),
+            ...(isRecord(m.aura)
+              ? {
+                  aura: {
+                    score: text(m.aura.score),
+                    status: text(m.aura.status),
+                    ...(isRecord(m.aura.peak)
+                      ? {
+                          peak: {
+                            points: text(m.aura.peak.points),
+                            reason: text(m.aura.peak.reason),
+                            ...(typeof m.aura.peak.quote === 'string' && m.aura.peak.quote.length > 0
+                              ? { quote: m.aura.peak.quote }
+                              : {}),
+                          },
+                        }
+                      : {}),
+                    ...(isRecord(m.aura.loss)
+                      ? {
+                          loss: {
+                            points: text(m.aura.loss.points),
+                            reason: text(m.aura.loss.reason),
+                            ...(typeof m.aura.loss.quote === 'string' && m.aura.loss.quote.length > 0
+                              ? { quote: m.aura.loss.quote }
+                              : {}),
+                          },
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
           }
         : null,
     ),

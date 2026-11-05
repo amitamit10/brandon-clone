@@ -129,4 +129,26 @@ describe('report api helpers', () => {
     expect(report.runningJokes).toEqual(['ok'])
     expect(report.sections).toEqual([])
   })
+
+  it('normalizeReport preserves member aura metrics and quotes', () => {
+    const report = normalizeReport({
+      members: [
+        {
+          name: 'Amit',
+          aura: {
+            score: '+50,000',
+            status: 'מלך האורה',
+            peak: { points: '+20,000', reason: 'cool line', quote: 'hi' },
+            loss: { points: '-5,000', reason: 'late', quote: 'bye' },
+          },
+        },
+      ],
+    })
+    expect(report.members[0].aura).toEqual({
+      score: '+50,000',
+      status: 'מלך האורה',
+      peak: { points: '+20,000', reason: 'cool line', quote: 'hi' },
+      loss: { points: '-5,000', reason: 'late', quote: 'bye' },
+    })
+  })
 })
