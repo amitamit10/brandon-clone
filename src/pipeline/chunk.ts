@@ -11,12 +11,19 @@ const hm = (ts: number) => {
 /** Collapses all whitespace (including newlines) so a message is always one line. */
 const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim()
 
+export const DEFAULT_MAX_CHUNKS = 30
+
 /**
  * Splits a chat into model-sized chunks. Lines are "HH:MM Sender: text", with a
  * "--- YYYY-MM-DD ---" header at the start of each chunk and whenever the day changes.
  * A message is never split. A single message longer than maxChars/2 is truncated with an ellipsis.
+ * If the resulting chunks exceed maxChunks, representative chunks are evenly sampled across the timeline.
  */
-export function chunkMessages(chat: ParsedChat, maxChars: number = DEFAULT_MAX_CHARS): Chunk[] {
+export function chunkMessages(
+  chat: ParsedChat,
+  maxChars: number = DEFAULT_MAX_CHARS,
+  maxChunks: number = DEFAULT_MAX_CHUNKS,
+): Chunk[] {
   const chunks: Chunk[] = []
   const cap = Math.floor(maxChars / 2)
 
@@ -53,5 +60,18 @@ export function chunkMessages(chat: ParsedChat, maxChars: number = DEFAULT_MAX_C
     toId = m.id
   }
   flush()
+
+  if (maxChunks > 0 && chunks.length > maxChunks) {
+    const sampled: Chunk[] = []
+    for (let i = 0; i < maxChunks; i++) {
+      const idx = Math.round((i * (chunks.length - 1)) / (maxChunks - 1))
+      sampled.push({
+        ...chunks[idx],
+        index: i,
+      })
+    }
+    return sampled
+  }
+
   return chunks
 }

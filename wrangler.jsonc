@@ -1,5 +1,6 @@
 {
   "name": "brandon-clone",
+  "account_id": "0f512227b9b4aca1ba9441dc2fa2c665",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-11-01",
   "assets": {
