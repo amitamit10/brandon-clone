@@ -48,7 +48,7 @@ export function ReadingScreen({ messages, participants, me, fraction }: ReadingS
                 <span className="reading-sender" style={{ color: colourOf(m.sender) }}>
                   {m.sender}
                 </span>
-                <span className="reading-text">
+                <span className="reading-text" dir="auto">
                   {m.text.length > PREVIEW_CHARS ? `${m.text.slice(0, PREVIEW_CHARS)}…` : m.text}
                 </span>
               </li>

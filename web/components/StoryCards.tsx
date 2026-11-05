@@ -218,7 +218,7 @@ function LongMessage({ sender, words, ts, text }: { sender: string; words: numbe
           {words.toLocaleString('en-US')} words · {formatDay(ts)}
         </span>
       </header>
-      <p className="bubble-text">{shown}</p>
+      <p className="bubble-text" dir="auto">{shown}</p>
       {long && (
         <button type="button" className="link-btn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           {open ? 'See less' : 'See more'}
@@ -244,7 +244,7 @@ function EdgeCard({ kind, stats, extras }: StoryProps & { kind: 'first' | 'last'
               {m.sender}
               <span className="small muted"> · {formatClock(m.ts)}</span>
             </span>
-            <span className="bubble-text">{m.text}</span>
+            <span className="bubble-text" dir="auto">{m.text}</span>
           </div>
         ))}
       </div>
