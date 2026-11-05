@@ -30,10 +30,12 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
   const [session] = useState<ChatSession | null>(() => sessionFor(chatId))
   const [history] = useState(() => settingsForChat(chatId))
   const [searchParams, setSearchParams] = useSearchParams()
+  const [clientReadingDone, setClientReadingDone] = useState(false)
   const job = useReportJob(reportId)
   const { view, viewError, reloadView } = useReportView(reportId, job.status)
 
   const readingDone =
+    clientReadingDone ||
     job.status !== 'running' ||
     (job.total > 0 && job.phase !== 'summarizing') ||
     (job.total > 1 && job.progress >= job.total - 1)
@@ -84,6 +86,11 @@ function ReportFlow({ chatId, reportId }: { chatId: string; reportId: string }) 
         me={session.me}
         fraction={readingFraction(job)}
         language={language}
+        onSkip={() => {
+          setClientReadingDone(true)
+          setSearchParams({ show: 'steps', step: '1' })
+        }}
+        onDone={() => setClientReadingDone(true)}
       />
     )
   }
