@@ -6,7 +6,7 @@ export class OpenRouterProvider implements LlmProvider {
   name = 'openrouter'
   constructor(
     private apiKey: string,
-    private model: string,
+    public model: string,
   ) {}
 
   async generate(req: LlmRequest): Promise<{ text: string }> {

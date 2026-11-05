@@ -1,7 +1,50 @@
 import type { Env } from '../worker/index'
 import { GeminiProvider } from './gemini'
 import { OpenRouterProvider } from './openrouter'
-import { createFallbackProvider, type LlmProvider } from './provider'
+import { createFallbackProvider, RateLimitError, type LlmProvider } from './provider'
+
+/** One underlying provider attempt, as reported to hooks. Carries no prompt or reply text. */
+export interface LlmCallInfo {
+  provider: string
+  model: string
+  ok: boolean
+  ms: number
+  rateLimited: boolean
+}
+
+export interface ProviderHooks {
+  onCall?: (info: LlmCallInfo) => void | Promise<void>
+}
+
+/**
+ * Wraps one provider so every generate() call is reported to onCall. Errors are rethrown unchanged, so
+ * RateLimitError checks still work. A failing hook is ignored and never changes the outcome.
+ */
+export function instrument(p: LlmProvider, hooks: ProviderHooks = {}): LlmProvider {
+  return {
+    name: p.name,
+    model: p.model,
+    async generate(req) {
+      const started = Date.now()
+      let ok = false
+      let rateLimited = false
+      try {
+        const out = await p.generate(req)
+        ok = true
+        return out
+      } catch (err) {
+        rateLimited = err instanceof RateLimitError
+        throw err
+      } finally {
+        try {
+          await hooks.onCall?.({ provider: p.name, model: p.model ?? '', ok, ms: Date.now() - started, rateLimited })
+        } catch {
+          // A broken hook must never change the provider's result.
+        }
+      }
+    },
+  }
+}
 
 /**
  * Verified against https://openrouter.ai/api/v1/models on 2026-11-05: free, 1,048,576-token context, JSON mode.
@@ -32,12 +75,12 @@ function geminiModels(env: Env): string[] {
  * Builds the provider chain from env. Gemini is primary unless LLM_PRIMARY is 'openrouter'.
  * Only providers with a key are used. Wrapped in the fallback provider with 3 retry rounds.
  */
-export function createProviderFromEnv(env: Env): LlmProvider {
+export function createProviderFromEnv(env: Env, hooks: ProviderHooks = {}): LlmProvider {
   const gemini = env.GEMINI_API_KEY
-    ? geminiModels(env).map((model) => new GeminiProvider(env.GEMINI_API_KEY as string, model))
+    ? geminiModels(env).map((model) => instrument(new GeminiProvider(env.GEMINI_API_KEY as string, model), hooks))
     : []
   const openrouter = env.OPENROUTER_API_KEY
-    ? new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL)
+    ? instrument(new OpenRouterProvider(env.OPENROUTER_API_KEY, env.OPENROUTER_MODEL || DEFAULT_OPENROUTER_MODEL), hooks)
     : undefined
   const others: LlmProvider[] = openrouter ? [openrouter] : []
   const providers: LlmProvider[] = env.LLM_PRIMARY === 'openrouter' ? [...others, ...gemini] : [...gemini, ...others]

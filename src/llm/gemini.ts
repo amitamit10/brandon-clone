@@ -6,7 +6,7 @@ export class GeminiProvider implements LlmProvider {
   name = 'gemini'
   constructor(
     private apiKey: string,
-    private model = 'gemini-2.5-flash',
+    public model = 'gemini-2.5-flash',
   ) {}
 
   async generate(req: LlmRequest): Promise<{ text: string }> {

@@ -4,6 +4,7 @@ import { advanceReport } from './jobs'
 import { createDb, randomId, type ReportRow } from './db'
 import { checkRateLimit, deleteOldRateRows, hashIp, ipBucketKey, retryAfterSeconds } from './ratelimit'
 import { ApiError, MAX_UPLOAD_BYTES, validateUpload } from './validate'
+import { UsageBuffer, bump, dayOf, pruneUsage, quietly, recordVisitor } from './usage'
 import { cleanOneLine } from '../pipeline/safety'
 
 export interface Env {
@@ -113,6 +114,9 @@ const reportView = (r: ReportRow) => ({
   ...(r.status === 'done' ? { content: r.content } : {}),
 })
 
+/** Anonymous per-client key for visitor counts: the rate-limit bucket key, never the raw IP. */
+const clientKey = (c: Context<{ Bindings: Env }>) => ipBucketKey(c.req.header('CF-Connecting-IP') ?? 'unknown')
+
 export function createApp(deps: AppDeps = {}) {
   const now = deps.now ?? Date.now
   const app = new Hono<{ Bindings: Env }>()
@@ -136,6 +140,7 @@ export function createApp(deps: AppDeps = {}) {
     const ip = c.req.header('CF-Connecting-IP') ?? 'unknown'
     const ok = await checkRateLimit(c.env.DB, await hashIp(ipBucketKey(ip)), bucket, now(), { perHour })
     if (!ok) {
+      await quietly(() => bump(c.env.DB, dayOf(now()), 'rate_limited', bucket))
       c.header('Retry-After', String(retryAfterSeconds(now())))
       throw new ApiError(429, 'rate_limited')
     }
@@ -145,7 +150,8 @@ export function createApp(deps: AppDeps = {}) {
 
   app.post('/api/chats', async (c) => {
     await limit(c, 'chat', LIMITS.createChat)
-    const up = validateUpload(parseJson(await readBounded(c.req.raw, MAX_UPLOAD_BYTES)))
+    const raw = await readBounded(c.req.raw, MAX_UPLOAD_BYTES)
+    const up = validateUpload(parseJson(raw))
     const chatId = await createDb(c.env.DB, now).insertChat({
       name: up.name,
       uploaderName: up.uploaderName,
@@ -153,6 +159,12 @@ export function createApp(deps: AppDeps = {}) {
       stats: up.stats,
       chunks: up.chunks,
       expiresAt: now() + CHAT_TTL_MS,
+    })
+    const day = dayOf(now())
+    await quietly(async () => {
+      await bump(c.env.DB, day, 'upload', 'all')
+      await bump(c.env.DB, day, 'upload_bytes', 'all', Math.ceil(raw.byteLength / 1024))
+      await recordVisitor(c.env.DB, day, clientKey(c))
     })
     return c.json(
       {
@@ -184,6 +196,11 @@ export function createApp(deps: AppDeps = {}) {
       question: req.question ?? undefined,
       total: chunks.length + 1,
     })
+    const day = dayOf(now())
+    await quietly(async () => {
+      await bump(c.env.DB, day, 'report_created', req.kind)
+      await recordVisitor(c.env.DB, day, clientKey(c))
+    })
     return c.json({ reportId }, 201)
   })
 
@@ -191,12 +208,16 @@ export function createApp(deps: AppDeps = {}) {
     const id = c.req.param('id')
     if (!isId(id)) throw notFound()
     await limit(c, 'advance', LIMITS.advance)
+    // LLM attempts and job outcomes are collected in memory and written once, after the job.
+    const usage = new UsageBuffer(now)
     let state
     try {
-      state = await advanceReport(c.env, id, { provider: deps.provider, now })
+      state = await advanceReport(c.env, id, { provider: deps.provider, now, usage })
     } catch (err) {
       if (err instanceof Error && err.message === 'no_llm_key_configured') throw new ApiError(503, 'llm_not_configured')
       throw err
+    } finally {
+      await usage.flush(c.env.DB)
     }
     if (!state) throw notFound()
     return c.json(state)
@@ -278,6 +299,11 @@ export async function scheduled(_controller: ScheduledController, env: Env, _ctx
     await deleteOldRateRows(env.DB, at)
   } catch {
     console.warn('scheduled_rate_cleanup_failed')
+  }
+  try {
+    await pruneUsage(env.DB, at)
+  } catch {
+    console.warn('scheduled_usage_cleanup_failed')
   }
 }
 
