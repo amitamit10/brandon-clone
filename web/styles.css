@@ -1902,13 +1902,6 @@ html[dir='rtl'] .whatsapp-bubble-tail {
   border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-@media (prefers-color-scheme: dark) {
-  .aura-moment {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-  }
-}
-
 .aura-moment-title {
   display: flex;
   align-items: center;
@@ -2242,7 +2235,7 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
   margin: 6px 0 0;
   font-size: 0.94rem;
   line-height: 1.55;
-  color: #1f2937;
+  color: #111827 !important;
   font-weight: 500;
 }
 
@@ -2294,7 +2287,7 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
   font-size: 0.88rem;
   font-weight: 600;
   line-height: 1.45;
-  color: #1e293b;
+  color: #0f172a !important;
   word-break: break-word;
 }
 
@@ -2344,21 +2337,4 @@ html[dir='rtl'] .aura-quote-loss .whatsapp-bubble {
 }
 .trait-future .trait-kicker {
   color: #0284c7;
-}
-
-@media (prefers-color-scheme: dark) {
-  .member-roast-callout {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.16) 0%, rgba(249, 115, 22, 0.1) 100%);
-    border-color: rgba(239, 68, 68, 0.4);
-  }
-  .roast-callout-text {
-    color: #f3f4f6;
-  }
-  .trait-pill {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.12);
-  }
-  .trait-text {
-    color: #f1f5f9;
-  }
 }
