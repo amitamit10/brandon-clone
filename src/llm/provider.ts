@@ -38,7 +38,7 @@ const BACKOFF_BASE_MS = 1000
 /** Longest we will sleep inside one call. A longer Retry-After is surfaced so the caller can resume later. */
 export const MAX_RETRY_WAIT_MS = 30_000
 /** Upper bound for a single upstream HTTP call. */
-export const LLM_FETCH_TIMEOUT_MS = 60_000
+export const LLM_FETCH_TIMEOUT_MS = 90_000
 /** For slow free models (about 7 tokens/s: a 1,000-token answer takes over two minutes). */
 export const LLM_SLOW_FETCH_TIMEOUT_MS = 180_000
 

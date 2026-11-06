@@ -211,7 +211,7 @@ describe('generateReport hardening', () => {
       question: 'q'.repeat(5000), retrieved: [],
     })
     const prompt = calls[0].prompt
-    expect(prompt.split('\n').filter((l) => l.startsWith('- Member'))).toHaveLength(15)
+    expect(prompt.split('\n').filter((l) => l.startsWith('- Member'))).toHaveLength(25)
     expect(prompt).not.toContain('x'.repeat(41))
     expect(prompt).not.toContain('q'.repeat(501))
     expect(prompt).toContain('Member199')
