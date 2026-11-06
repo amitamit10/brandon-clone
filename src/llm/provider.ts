@@ -38,7 +38,7 @@ const BACKOFF_BASE_MS = 1000
 /** Longest we will sleep inside one call. A longer Retry-After is surfaced so the caller can resume later. */
 export const MAX_RETRY_WAIT_MS = 30_000
 /** Upper bound for a single upstream HTTP call. */
-export const LLM_FETCH_TIMEOUT_MS = 60_000
+export const LLM_FETCH_TIMEOUT_MS = 90_000
 /** For slow free models (about 7 tokens/s: a 1,000-token answer takes over two minutes). */
 export const LLM_SLOW_FETCH_TIMEOUT_MS = 180_000
 
@@ -137,13 +137,19 @@ export function parseJsonText(text: string): unknown {
     return JSON.parse(body)
   } catch {}
 
+  // Fix Hebrew acronyms/gershayim written with unescaped double quotes (e.g. דו"ח, מנכ"ל, צה"ל)
+  const gershayimFixed = body.replace(/([\u0590-\u05FF])"([\u0590-\u05FF])/g, '$1״$2')
   try {
-    const cleaned = body.replace(/,\s*([}\]])/g, '$1')
+    return JSON.parse(gershayimFixed)
+  } catch {}
+
+  try {
+    const cleaned = gershayimFixed.replace(/,\s*([}\]])/g, '$1')
     return JSON.parse(cleaned)
   } catch {}
 
   try {
-    const repaired = repairJson(body)
+    const repaired = repairJson(gershayimFixed)
     return JSON.parse(repaired)
   } catch {}
 

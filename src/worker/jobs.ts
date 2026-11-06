@@ -119,7 +119,7 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
   const total = rows.length + 1
   const totalChars = rows.reduce((n, r) => n + r.text.length, 0)
   const direct = env.LLM_DIRECT === '1' && totalChars <= directMaxChars(env)
-  const concurrency = Math.min(Number(env.CHUNK_CONCURRENCY) || 1, 6)
+  const concurrency = Math.min(Number(env.CHUNK_CONCURRENCY) || 1, 15)
   const unsummarized = direct ? [] : rows.filter((r) => r.summary === null)
   const pendingBatch = unsummarized.slice(0, Math.max(1, concurrency))
   const pending = pendingBatch[0]

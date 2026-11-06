@@ -17,6 +17,7 @@ export default defineConfig({
             ADMIN_TOKEN: 'test-admin-token-0123456789abcdef',
             VISITOR_SECRET: 'test-visitor-secret-0123456789abcdef',
             LLM_DIRECT: '',
+            CHUNK_CONCURRENCY: '',
           } },
         })],
         test: {

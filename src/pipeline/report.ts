@@ -38,14 +38,26 @@ const MAX_ASK_CHARS = 500
 const MIN_QUOTE_CHARS = 4
 const MAX_VERIFIED_QUOTES = 200
 
-const REPORT_REQUIREMENTS = [
+const NARRATIVE_REQUIREMENTS = [
   'Requirements:',
   '- Write at least 5 sections (aim for 5 to 7 rich, funny, and deeply detailed chapters). Focus on spicy, entertaining, and savage roast chapters (e.g. cheapness and unpaid debts, flake culture and ghosting, unhinged 3 AM reels/voice notes, group micro-dramas, running jokes, and the week things collapsed). One section must be the Official Group Aura Leaderboard ("🔮 מדד האורה של ברנדון") brutally ranking who has aura and who is in catastrophic aura debt. Each section body has at least 3 to 5 sentences.',
   '- Across the sections include at least 5 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript. Each quote must be on its own line with a blank line before and after, like:\n\n> verbatim quote\n',
-  '- members: MANDATORY: YOU MUST WRITE A FULL ENTRY FOR EVERY SINGLE MEMBER LISTED UNDER "Per member" (write a complete profile for all 14 members, do not skip anyone!). opinion is 3 to 5 sentences of a spicy, hilarious roast dissecting that specific person\'s worst habits and flaws. roast is 1 to 2 sharp, hilarious paragraphs roasting them specifically. quote is ONE line copied verbatim from that member without leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+].join('\n')
+
+const MEMBER_REQUIREMENTS = [
+  '- members: MANDATORY: YOU MUST WRITE A FULL ENTRY FOR EVERY SINGLE MEMBER LISTED UNDER "Per member" (write a complete profile for all members listed under "Per member", do not skip anyone!). opinion is 3 to 5 sentences of a spicy, hilarious roast dissecting that specific person\'s worst habits and flaws. roast is 1 to 2 sharp, hilarious paragraphs roasting them specifically. quote is ONE line copied verbatim from that member without leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
   '- member traits: for EVERY member include roast, smurf (e.g. "דרדס חופר - ..."), futurePrediction (satirical 5-10 year prediction), charisma (e.g. "6/10 - ..."), selfImage (e.g. "בטוח שהוא אל יווני | בפועל: ..."), favoriteCurse, and animal (spirit animal with emoji and reason).',
   '- aura: for EVERY member provide their quantified Aura Check: score (e.g. "+50,000 אורה", "-65,000 אורה"), status (e.g. "טונות של אורה", "פשיטת רגל של אורה"), peak (points, reason, quote), and loss (points, reason, quote showing where their aura dropped). Both peak.quote and loss.quote must be real verbatim lines from that member without leading ">" or quotes.',
+  '- JSON FORMATTING: In Hebrew text inside JSON strings, NEVER write unescaped English double quotes ("). For acronyms (דוח, מנכל, צהל) or embedded quotes, write single quotes (\') or Hebrew gershayim (״) or write the word without quotes (דוח).',
 ].join('\n')
+
+const REPORT_REQUIREMENTS = [NARRATIVE_REQUIREMENTS, MEMBER_REQUIREMENTS].join('\n')
+
+/** Requirements for a members-only call: the profiles of the target members and nobody else. */
+const MEMBER_BATCH_REQUIREMENTS = MEMBER_REQUIREMENTS.replace(
+  /YOU MUST WRITE A FULL ENTRY FOR EVERY SINGLE MEMBER LISTED UNDER "Per member" \(write a complete profile for all 14 members, do not skip anyone!\)/,
+  'YOU MUST WRITE A FULL ENTRY FOR EVERY MEMBER NAMED IN "targets" in the REQUEST DATA block, in that order, and for nobody else (do not skip anyone!)',
+)
 
 const REPORT_SCHEMA = `{
   "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
@@ -59,6 +71,15 @@ const REPORT_SCHEMA = `{
   }],
   "advice": string
 }`
+
+const NARRATIVE_SCHEMA = `{
+  "title": string, "intro": string, "verdict": string, "dynamic": string, "shiftWeekNote": string,
+  "runningJokes": string[],
+  "sections": [{"emoji": string, "heading": string, "body": string}],
+  "advice": string
+}`
+
+const MEMBERS_SCHEMA = REPORT_SCHEMA.slice(REPORT_SCHEMA.indexOf('"members"'), REPORT_SCHEMA.indexOf('"advice"')).trim().replace(/,$/, '')
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x)
 const str = (x: unknown, max = MAX_SHORT_CHARS): string => {
@@ -76,15 +97,27 @@ const pct = (n: number, total: number) => (total > 0 ? ((n / total) * 100).toFix
 const isoDay = (ts: number) => new Date(ts).toISOString().slice(0, 10)
 const hhmm = (ts: number) => new Date(ts).toISOString().slice(11, 16)
 
-/** The stats block, formatted from the exact numbers computed by code. */
-function statsBlock(stats: ChatStats, me?: string): string {
+/** The members the prompt asks profiles for: the most active ones, plus the uploader. */
+function topMembers(stats: ChatStats, me?: string) {
   const entries = Object.entries(stats.perMember)
     .filter(([name, m]) => m.messages >= 2 && name !== 'You')
     .sort((x, y) => y[1].messages - x[1].messages)
   const top = entries.slice(0, PROMPT_MEMBERS)
-  if (me && !top.some(([n]) => n === me) && stats.perMember[me]) {
-    top.push([me, stats.perMember[me]])
+  if (me && !top.some(([n]) => n === me)) {
+    const meNorm = me.replace(/[\p{Emoji}\s]/gu, '').toLowerCase()
+    const meEntry = entries.find(
+      ([n]) => n === me || (meNorm.length > 0 && n.replace(/[\p{Emoji}\s]/gu, '').toLowerCase().includes(meNorm)),
+    )
+    if (meEntry && !top.some(([n]) => n === meEntry[0])) {
+      top.push(meEntry)
+    }
   }
+  return top
+}
+
+/** The stats block, formatted from the exact numbers computed by code. */
+function statsBlock(stats: ChatStats, me?: string): string {
+  const top = topMembers(stats, me)
   const lines = [
     `Chat: ${stats.total} messages from ${isoDay(stats.firstTs)} to ${isoDay(stats.lastTs)} (${stats.days} days).`,
     'Per member (YOU MUST WRITE A DEDICATED PROFILE ENTRY FOR EVERY SINGLE MEMBER LISTED HERE):',

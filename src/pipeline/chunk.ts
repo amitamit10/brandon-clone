@@ -49,30 +49,40 @@ export function scoreChunk(chunk: Chunk): number {
 }
 
 /**
- * Smart stratified sampling algorithm:
- * - Guarantees inclusion of the first chunk (group inception) and the last chunk (current dynamic).
- * - Divides the entire timeline into equal chronological windows and selects the chunk with the
- *   highest information and comedic banter score in each window.
- * - Preserves strict chronological order and covers the entire timeline with no blind spots.
+ * How strongly sampling favours recent chunks. 0 = uniform over the timeline, 1 = the densest
+ * (quadratic) recency curve. At 0.6 the newest stretch gets about 2.5x the sampling density of
+ * the average and the oldest stretch about 0.6x, so old history is thinner but still covered.
+ */
+export const RECENCY_BIAS = 0.6
+
+/** Maps a uniform position t in [0,1] to a timeline position, bunching samples toward the end. */
+const warp = (t: number) => (1 - RECENCY_BIAS) * t + RECENCY_BIAS * (1 - (1 - t) ** 2)
+
+/**
+ * Recency-weighted stratified sampling:
+ * - Always includes the first chunk (group inception) and the last chunk (current dynamic).
+ * - Places the remaining slots along a curve that is denser toward the present, so recent
+ *   conversation gets more chunks while the old timeline is still represented (no blind spots).
+ * - In each slot's window, picks the chunk with the highest banter score.
+ * - Preserves chronological order and re-indexes 0 .. N-1.
  */
 export function smartSampleChunks(chunks: Chunk[], maxChunks: number): Chunk[] {
   if (chunks.length <= maxChunks || maxChunks <= 0) return chunks
 
-  const chosenIndices = new Set<number>()
-  // Always include the very beginning and very end
-  chosenIndices.add(0)
-  chosenIndices.add(chunks.length - 1)
-
-  // Stratify the remaining chunks into chronological intervals
+  const last = chunks.length - 1
+  const chosenIndices = new Set<number>([0, last])
   const slots = maxChunks - chosenIndices.size
-  const step = (chunks.length - 1) / (slots + 1)
+
+  // Slot centres along the warped timeline, with window borders at the midpoints between them.
+  const centres: number[] = [0]
+  for (let i = 1; i <= slots; i++) centres.push(warp(i / (slots + 1)) * last)
+  centres.push(last)
 
   for (let i = 1; i <= slots; i++) {
-    const rangeStart = Math.floor((i - 0.5) * step)
-    const rangeEnd = Math.min(chunks.length - 1, Math.ceil((i + 0.5) * step))
-    let bestIdx = rangeStart
+    const rangeStart = Math.max(0, Math.ceil((centres[i - 1] + centres[i]) / 2))
+    const rangeEnd = Math.min(last, Math.floor((centres[i] + centres[i + 1]) / 2))
+    let bestIdx = -1
     let bestScore = -1
-
     for (let j = rangeStart; j <= rangeEnd; j++) {
       if (chosenIndices.has(j)) continue
       const s = scoreChunk(chunks[j])
@@ -81,16 +91,20 @@ export function smartSampleChunks(chunks: Chunk[], maxChunks: number): Chunk[] {
         bestIdx = j
       }
     }
-    chosenIndices.add(bestIdx)
+    if (bestIdx === -1) {
+      // Window fully taken (dense recent region): fall back to the nearest unchosen chunk.
+      for (let d = 1; d <= last && bestIdx === -1; d++) {
+        const c = Math.round(centres[i])
+        if (c - d >= 0 && !chosenIndices.has(c - d)) bestIdx = c - d
+        else if (c + d <= last && !chosenIndices.has(c + d)) bestIdx = c + d
+      }
+    }
+    if (bestIdx !== -1) chosenIndices.add(bestIdx)
   }
 
-  // Sort by chronological order and re-index 0 .. N-1
   return Array.from(chosenIndices)
     .sort((a, b) => a - b)
-    .map((origIdx, newIdx) => ({
-      ...chunks[origIdx],
-      index: newIdx,
-    }))
+    .map((origIdx, newIdx) => ({ ...chunks[origIdx], index: newIdx }))
 }
 
 /**

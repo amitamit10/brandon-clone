@@ -91,4 +91,18 @@ describe('chunkMessages', () => {
     expect(sampled[0].index).toBe(0)
     expect(sampled[sampled.length - 1].index).toBe(sampled.length - 1)
   })
+
+  it('sampling favours recent chunks but still keeps old ones', async () => {
+    const { smartSampleChunks } = await import('../../src/pipeline/chunk')
+    const chunks = Array.from({ length: 200 }, (_, i) => ({ index: i, fromId: i, toId: i, text: '10:00 Ana: ok' }))
+    const sampled = smartSampleChunks(chunks, 40)
+    const ids = sampled.map((c) => c.fromId)
+    expect(sampled.length).toBe(40)
+    expect(new Set(ids).size).toBe(40)
+    expect(ids[0]).toBe(0)
+    expect(ids[ids.length - 1]).toBe(199)
+    const recentHalf = ids.filter((id) => id >= 100).length
+    expect(recentHalf).toBeGreaterThan(22) // more than the uniform 20 come from the newer half
+    expect(ids.filter((id) => id < 50).length).toBeGreaterThanOrEqual(5) // old history still present
+  })
 })
