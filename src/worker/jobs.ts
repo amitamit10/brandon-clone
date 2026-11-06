@@ -194,17 +194,11 @@ export async function advanceReport(env: Env, reportId: string, deps: AdvanceDep
     return recordFailure(db, reportId, err, { progress: summarized, total, pending: false }, claim.token, deps.usage)
   }
 
-  const parsed: ParsedChat = {
-    messages: reconstructMessages(
-      rows.map((r) => ({ index: r.idx, text: r.text })),
-      chat.participants,
-    ),
+  const content = verifyQuotes(generated, {
+    chunks: rows.map((r) => ({ text: r.text })),
     participants: chat.participants,
-    systemEvents: [],
-    format: 'android',
-    dateOrder: 'mdy',
-  }
-  const content = verifyQuotes(generated, parsed)
+    stats: chat.stats,
+  })
   const written = await db.finishReport(reportId, content, total, claim.token)
   if (!written) {
     const current = await db.getReport(reportId)
@@ -224,7 +218,7 @@ function stateOf(r: { status: ReportStatus; progress: number; total: number; err
   return { status: r.status, phase: phaseOf(r.status, pendingSummaries), progress: r.progress, total: r.total, error: r.error ?? undefined }
 }
 
-/** Records one failed LLM step. Only the short code is stored, never the provider's message. */
+/** Records one failed LLM step. */
 async function recordFailure(
   db: ReturnType<typeof createDb>,
   reportId: string,
@@ -233,6 +227,8 @@ async function recordFailure(
   token: number,
   usage?: UsageBuffer,
 ): Promise<JobState> {
+  const errMsg = err instanceof Error ? err.message : String(err)
+  console.error('[advanceReport:recordFailure]', reportId, errMsg)
   const code = err instanceof RateLimitError ? 'rate_limited' : 'llm_error'
   const after = await db.failAttempt(reportId, code, MAX_FAILURES, token)
   const status: ReportStatus = after?.status ?? 'running'

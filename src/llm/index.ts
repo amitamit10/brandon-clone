@@ -74,13 +74,13 @@ function openrouterModels(env: Env): string[] {
  * chain: when one fails the next is tried, and only then does the backoff sleep. Override with the
  * comma-separated GEMINI_MODELS env var.
  */
-export const DEFAULT_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3-flash-preview', 'gemini-3.6-flash']
+export const DEFAULT_GEMINI_MODELS = ['gemini-flash-lite-latest', 'gemini-3.1-flash-lite', 'gemini-3.5-flash-lite']
 
 /**
- * The final report needs the stronger models first (the lite model gave thin or invalid reports on the
- * real 14k-message test chat, 2026-11-05); lite is only the last resort.
+ * The final report needs the strongest fast Gemini model first (gemini-flash-latest),
+ * with gemini-flash-lite-latest as the fast reliable fallback.
  */
-export const REPORT_GEMINI_MODELS = ['gemini-3-flash-preview', 'gemini-3.6-flash', 'gemini-flash-lite-latest']
+export const REPORT_GEMINI_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest']
 
 export type LlmPurpose = 'summary' | 'report'
 
@@ -126,7 +126,10 @@ export function createProviderFromEnv(
   const openrouter: LlmProvider[] = env.OPENROUTER_API_KEY
     ? openrouterModels(env).map((model) => instrument(new OpenRouterProvider(env.OPENROUTER_API_KEY as string, model), hooks))
     : []
-  const providers: LlmProvider[] = env.LLM_PRIMARY === 'openrouter' ? [...openrouter, ...gemini] : [...gemini, ...openrouter]
+  // For the final group report synthesis, prefer Gemini Flash for fast generation and deep context;
+  // fall back to OpenRouter. For chunk summaries, respect LLM_PRIMARY.
+  const preferGemini = purpose === 'report' && gemini.length > 0 ? true : env.LLM_PRIMARY !== 'openrouter'
+  const providers: LlmProvider[] = preferGemini ? [...gemini, ...openrouter] : [...openrouter, ...gemini]
   if (providers.length === 0) throw new Error('no_llm_key_configured')
   return createFallbackProvider(providers, {
     retries: 3,

@@ -80,12 +80,73 @@ export function createFallbackProvider(
   }
 }
 
-/** Strips markdown code fences that free models often wrap JSON in. */
-function parseJsonText(text: string): unknown {
-  const body = text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/, '')
+function repairJson(s: string): string {
+  let str = s.trim()
+  let inString = false
+  let escaped = false
+  const stack: string[] = []
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (c === '\\') {
+      escaped = true
+      continue
+    }
+    if (c === '"') {
+      inString = !inString
+      continue
+    }
+    if (!inString) {
+      if (c === '{' || c === '[') stack.push(c)
+      else if (c === '}' && stack[stack.length - 1] === '{') stack.pop()
+      else if (c === ']' && stack[stack.length - 1] === '[') stack.pop()
+    }
+  }
+  if (inString) str += '"'
+  str = str.replace(/,\s*$/, '')
+  while (stack.length > 0) {
+    const open = stack.pop()
+    str = str.replace(/,\s*$/, '')
+    if (open === '{') str += '}'
+    else if (open === '[') str += ']'
+  }
+  return str.replace(/,\s*([}\]])/g, '$1')
+}
+
+/** Strips markdown code fences or conversational text that free models often wrap JSON in, with truncated JSON repair. */
+export function parseJsonText(text: string): unknown {
+  let body = text.trim()
+  const fenceMatch = /```(?:json)?\s*([\s\S]*?)\s*(?:```|$)/i.exec(body)
+  if (fenceMatch) {
+    body = fenceMatch[1].trim()
+  } else {
+    const firstBrace = body.indexOf('{')
+    if (firstBrace !== -1) {
+      body = body.slice(firstBrace)
+      const lastBrace = body.lastIndexOf('}')
+      if (lastBrace !== -1) {
+        body = body.slice(0, lastBrace + 1)
+      }
+    }
+  }
+
+  try {
+    return JSON.parse(body)
+  } catch {}
+
+  try {
+    const cleaned = body.replace(/,\s*([}\]])/g, '$1')
+    return JSON.parse(cleaned)
+  } catch {}
+
+  try {
+    const repaired = repairJson(body)
+    return JSON.parse(repaired)
+  } catch {}
+
   return JSON.parse(body)
 }
 
@@ -105,13 +166,14 @@ export async function generateJson<T>(
   const first = await p.generate({ ...req, json: true })
   try {
     return validate(parseJsonText(first.text))
-  } catch {
-    // fall through to the repair attempt
+  } catch (err) {
+    console.warn('[generateJson:first_failed]', err instanceof Error ? err.message : err)
   }
   const second = await p.generate({ ...req, json: true, prompt: `${req.prompt}\n\n${REPAIR_NOTE}` })
   try {
     return validate(parseJsonText(second.text))
-  } catch {
+  } catch (err) {
+    console.error('[generateJson:second_failed]', err instanceof Error ? err.message : err)
     throw new Error('llm_invalid_json')
   }
 }

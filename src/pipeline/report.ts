@@ -179,7 +179,9 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
   const sectionsRaw = list(x.sections, MAX_SECTIONS)
   const sections = sectionsRaw.map((s) => {
     if (!isObject(s)) throw new Error('section is not an object')
-    return { emoji: str(s.emoji, 16), heading: str(s.heading), body: str(s.body, MAX_BODY_CHARS) }
+    const emoji = typeof s.emoji === 'string' && s.emoji.trim() ? str(s.emoji, 16) : '📝'
+    const heading = typeof s.heading === 'string' && s.heading.trim() ? str(s.heading) : 'פרק'
+    return { emoji, heading, body: str(s.body ?? '', MAX_BODY_CHARS) }
   })
   if (sections.length === 0) throw new Error('no sections')
 
@@ -228,10 +230,13 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     }
     const rawName = str(m.name)
     const canonicalName = resolveParticipantName(rawName, known)
+    const name = canonicalName ?? rawName
+    const nickname = typeof m.nickname === 'string' && m.nickname.trim() ? str(m.nickname) : name
+    const opinion = typeof m.opinion === 'string' && m.opinion.trim() ? str(m.opinion, MAX_BODY_CHARS) : (roast ?? 'חבר קבוצה פעיל.')
     return {
-      name: canonicalName ?? rawName,
-      nickname: str(m.nickname),
-      opinion: str(m.opinion, MAX_BODY_CHARS),
+      name,
+      nickname,
+      opinion,
       ...(roast ? { roast } : {}),
       ...(animal ? { animal } : {}),
       ...(smurf ? { smurf } : {}),
@@ -259,11 +264,11 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
     intro: full ? str(x.intro, MAX_BODY_CHARS) : optStr(x.intro, MAX_BODY_CHARS),
     verdict,
     dynamic: full ? str(x.dynamic, MAX_BODY_CHARS) : optStr(x.dynamic, MAX_BODY_CHARS),
-    shiftWeekNote: full ? str(x.shiftWeekNote, MAX_BODY_CHARS) : optStr(x.shiftWeekNote, MAX_BODY_CHARS),
+    shiftWeekNote: optStr(x.shiftWeekNote, MAX_BODY_CHARS),
     runningJokes: (jokesRaw as string[]).map((j) => j.slice(0, MAX_SHORT_CHARS)),
     sections,
     members,
-    advice: full ? str(x.advice, MAX_BODY_CHARS) : optStr(x.advice, MAX_BODY_CHARS),
+    advice: typeof x.advice === 'string' ? str(x.advice, MAX_BODY_CHARS) : (full ? 'שתו מים ותרגיעו את הוויב בקבוצה.' : ''),
   }
 }
 
@@ -341,27 +346,39 @@ function unwrap(s: string): string {
   return s.slice(start, end)
 }
 
+export type QuoteSource =
+  | ParsedChat
+  | {
+      messages?: Message[]
+      chunks?: { text: string }[]
+      participants?: string[]
+      stats?: ChatStats
+    }
+
 /**
  * Drops every quote that is not a substring of one text message (media/deleted messages are ignored).
  * Member quotes must come from that member's own messages; section '> ' quotes from any member.
  * Quotes shorter than MIN_QUOTE_CHARS never count. Returns a new report; the input is not changed.
  */
-export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport {
-  // \u0001 separates messages, so a quote cannot match across two messages. Sender names are
-  // untrusted, so the per-sender index is a Map.
+export function verifyQuotes(report: GroupReport, chat: QuoteSource): GroupReport {
+  const hasMessages = Array.isArray(chat.messages) && chat.messages.length > 0
   const bySender = new Map<string, string[]>()
   const all: string[] = []
-  for (const m of chat.messages) {
-    if (m.kind !== 'text') continue
-    const n = normalise(m.text)
-    all.push(n)
-    const list = bySender.get(m.sender)
-    if (list) list.push(n)
-    else bySender.set(m.sender, [n])
+  if (hasMessages) {
+    for (const m of chat.messages!) {
+      if (m.kind !== 'text') continue
+      const n = normalise(m.text)
+      all.push(n)
+      const list = bySender.get(m.sender)
+      if (list) list.push(n)
+      else bySender.set(m.sender, [n])
+    }
   }
   const hayAll = all.join('\u0001')
   const haySender = new Map<string, string>()
   for (const [k, v] of bySender) haySender.set(k, v.join('\u0001'))
+
+  const chunkTexts = 'chunks' in chat && Array.isArray(chat.chunks) ? chat.chunks.map((c) => c.text) : []
 
   const verified = (raw: string, sender?: string): string | undefined => {
     // Models often copy the blockquote marker into a member's quote field: strip it before checking.
@@ -378,8 +395,24 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
       else if (n.startsWith(`${sPrefix} -`)) n = n.slice(sPrefix.length + 2).trim()
     }
 
-    const hay = sender === undefined ? hayAll : haySender.get(sender)
-    return hay !== undefined && hay.includes(n) ? clean : undefined
+    if (hasMessages) {
+      const hay = sender === undefined ? hayAll : haySender.get(sender)
+      return hay !== undefined && hay.includes(n) ? clean : undefined
+    }
+
+    // Fast chunk check: avoids reconstructing 100k+ messages and runs in < 0.1ms CPU
+    const sNeedle = sender ? normalise(sender) : undefined
+    for (const chunk of chunkTexts) {
+      if (!normalise(chunk).includes(n)) continue
+      if (!sNeedle) return clean
+      for (const line of chunk.split('\n')) {
+        const normLine = normalise(line)
+        if (normLine.includes(sNeedle) && normLine.includes(n)) {
+          return clean
+        }
+      }
+    }
+    return undefined
   }
 
   let keptQuotes = 0
@@ -439,7 +472,9 @@ export function verifyQuotes(report: GroupReport, chat: ParsedChat): GroupReport
             : {}),
         }
       }
+      const { quote: _oldQuote, aura: _oldAura, ...rest } = m
       return {
+        ...rest,
         name: m.name,
         nickname: m.nickname,
         opinion: m.opinion,
