@@ -32,7 +32,7 @@ const MAX_MEMBERS = 60
 const MAX_JOKES = 20
 const MAX_BODY_CHARS = 8_000
 const MAX_SHORT_CHARS = 2_000
-const PROMPT_MEMBERS = 25
+const PROMPT_MEMBERS = 14
 const MAX_NAME_CHARS = 40
 const MAX_ASK_CHARS = 500
 const MIN_QUOTE_CHARS = 4
@@ -42,7 +42,7 @@ const REPORT_REQUIREMENTS = [
   'Requirements:',
   '- Write at least 5 sections (aim for 5 to 7 rich, funny, and deeply detailed chapters). Focus on spicy, entertaining, and savage roast chapters (e.g. cheapness and unpaid debts, flake culture and ghosting, unhinged 3 AM reels/voice notes, group micro-dramas, running jokes, and the week things collapsed). One section must be the Official Group Aura Leaderboard ("🔮 מדד האורה של ברנדון") brutally ranking who has aura and who is in catastrophic aura debt. Each section body has at least 3 to 5 sentences.',
   '- Across the sections include at least 5 real quotes as blockquote lines that start with "> ", each copied verbatim from the supplied quotes or transcript. Each quote must be on its own line with a blank line before and after, like:\n\n> verbatim quote\n',
-  '- members: MANDATORY: YOU MUST WRITE A FULL ENTRY FOR EVERY SINGLE MEMBER LISTED UNDER "Per member" (AIM FOR ALL 15-25 MEMBERS! DO NOT STOP AT 5 OR 7!). opinion is 3 to 5 sentences of a spicy, hilarious roast dissecting that specific person\'s worst habits and flaws. roast is 1 to 2 sharp, hilarious paragraphs roasting them specifically. quote is ONE line copied verbatim from that member without leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
+  '- members: MANDATORY: YOU MUST WRITE A FULL ENTRY FOR EVERY SINGLE MEMBER LISTED UNDER "Per member" (write a complete profile for all 14 members, do not skip anyone!). opinion is 3 to 5 sentences of a spicy, hilarious roast dissecting that specific person\'s worst habits and flaws. roast is 1 to 2 sharp, hilarious paragraphs roasting them specifically. quote is ONE line copied verbatim from that member without leading ">" and without quotation marks; leave it empty if there is no real line by that member.',
   '- member traits: for EVERY member include roast, smurf (e.g. "דרדס חופר - ..."), futurePrediction (satirical 5-10 year prediction), charisma (e.g. "6/10 - ..."), selfImage (e.g. "בטוח שהוא אל יווני | בפועל: ..."), favoriteCurse, and animal (spirit animal with emoji and reason).',
   '- aura: for EVERY member provide their quantified Aura Check: score (e.g. "+50,000 אורה", "-65,000 אורה"), status (e.g. "טונות של אורה", "פשיטת רגל של אורה"), peak (points, reason, quote), and loss (points, reason, quote showing where their aura dropped). Both peak.quote and loss.quote must be real verbatim lines from that member without leading ">" or quotes.',
 ].join('\n')
@@ -278,7 +278,7 @@ function toReport(x: unknown, a: ReportInput): GroupReport {
 
 /** One model call (plus at most one repair) that writes a report in the chosen persona. */
 export async function generateReport(p: LlmProvider, a: ReportInput): Promise<GroupReport> {
-  const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a), maxTokens: 16384 }
+  const req: LlmRequest = { system: PERSONAS[a.persona].system, prompt: buildPrompt(a), maxTokens: 10000 }
   return sanitizeReport(await generateJson(p, req, (x) => toReport(x, a)))
 }
 
